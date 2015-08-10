@@ -158,20 +158,6 @@ namespace psh
 				phi = std::move(phi_hat);
 				H = std::move(H_hat);
 			}
-
-			std::cout << "verifying" << std::endl;
-			for (auto& element : data)
-			{
-				auto hashed = H[point_to_index(h(element), m_bar, m)].value();
-				if (element != hashed)
-				{
-					std::cout << "oops!" << std::endl;
-					VALUE(element);
-					VALUE(hashed);
-				}
-			}
-			std::cout << "success!" << std::endl;
-
 		}
 
 		constexpr uint point_to_index(const point& p, uint width, uint max) const
@@ -217,7 +203,7 @@ namespace psh
 
 		opt_point get(const data_t& p) const
 		{
-			return H[h(p)];
+			return H[point_to_index(h(p), m_bar, m)];
 		}
 	};
 }
