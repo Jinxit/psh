@@ -38,7 +38,7 @@ namespace psh
 			  r_bar(std::ceil(std::pow(n / (2 * d), 1.0f / d)) - 1), generator(time(0))
 		{
 			M0 = prime();
-			M1 = prime();
+			while ((M1 = prime()) == M0);
 
 			VALUE(m);
 			VALUE(m_bar);
