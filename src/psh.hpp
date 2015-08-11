@@ -59,7 +59,7 @@ namespace psh
 
 		uint prime()
 		{
-			static const std::vector<uint> primes = { 53, 97, 193, 389, 769, 1543, 3079, 6151, 12289,
+			static const std::vector<uint> primes{ 53, 97, 193, 389, 769, 1543, 3079, 6151, 12289,
 				24593, 49157, 98317, 196613, 393241, 786433, 1572869, 3145739, 6291469 };
 			static std::uniform_int_distribution<uint> prime_dist(0, primes.size() - 1);
 
