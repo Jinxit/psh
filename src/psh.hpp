@@ -106,7 +106,7 @@ namespace psh
 			}
 		}
 
-		bool jiggle(decltype(H)& H_hat, decltype(phi)& phi_hat, uint max_index,
+		bool jiggle_offsets(decltype(H)& H_hat, decltype(phi)& phi_hat, uint max_index,
 			const std::vector<point>& bucket, std::uniform_int_distribution<uint>& m_dist)
 		{
 			uint possible_offset = m_dist(generator);
@@ -172,7 +172,7 @@ namespace psh
 				if (max_count == 0)
 					break;
 
-				if (!jiggle(H_hat, phi_hat, max_index, buckets[max_index], m_dist))
+				if (!jiggle_offsets(H_hat, phi_hat, max_index, buckets[max_index], m_dist))
 				{
 					return false;
 				}
