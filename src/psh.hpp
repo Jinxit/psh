@@ -135,6 +135,19 @@ namespace psh
 			return false;
 		}
 
+		std::vector<std::vector<point>> create_buckets(const std::vector<data_t>& data)
+		{
+			std::vector<std::vector<point>> buckets(r);
+
+			for (auto& element : data)
+			{
+				auto h1 = M1 * element;
+				buckets[point_to_index(h1, r_bar, r)].push_back(element);
+			}
+
+			return buckets;
+		}
+
 		bool create(const std::vector<data_t>& data, std::uniform_int_distribution<uint>& m_dist)
 		{
 			decltype(phi) phi_hat;
@@ -145,13 +158,7 @@ namespace psh
 			if (bad_m_r())
 				return false;
 
-			std::vector<std::vector<point>> buckets(r);
-
-			for (auto& element : data)
-			{
-				auto h1 = M1 * element;
-				buckets[point_to_index(h1, r_bar, r)].push_back(element);
-			}
+			auto buckets = create_buckets(data);
 
 			std::cout << "buckets created, jiggling offsets" << std::endl;
 
