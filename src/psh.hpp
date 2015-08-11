@@ -6,6 +6,7 @@
 #include <iostream>
 #include <set>
 #include <vector>
+#include <utility>
 #include <Eigen/Dense>
 
 #define VALUE(x) std::cout << #x "=" << x << std::endl
@@ -45,6 +46,8 @@ namespace psh
 
 			bool create_succeeded = false;
 
+			std::uniform_int_distribution<uint> m_dist(0, m - 1);
+
 			do
 			{
 				r_bar += d;
@@ -52,7 +55,7 @@ namespace psh
 				VALUE(r);
 				VALUE(r_bar);
 
-				create_succeeded = create(data);
+				create_succeeded = create(data, m_dist);
 
 			} while (!create_succeeded);
 		}
@@ -66,23 +69,43 @@ namespace psh
 			return primes[prime_dist(generator)];
 		}
 
-		bool create(const std::vector<data_t>& data)
+		bool bad_m_r()
+		{
+			auto m_mod_r = m_bar % r_bar;
+			return m_mod_r == 1 || m_mod_r == r - 1;
+		}
+
+		std::pair<uint, uint> best_bucket(const std::vector<std::vector<point>>& buckets, bool easy)
+		{
+			uint max_index = 0;
+			uint max_count = 0;
+			for (uint j = 0; j < buckets.size(); j++)
+			{
+				// in hard mode we find the biggest bucket
+				if (buckets[j].size() > max_count
+					|| (easy && buckets[j].size() > 0))
+				{
+					max_count = buckets[j].size();
+					max_index = j;
+
+					// in easy mode we grab the first non-empty bucket
+					if (easy)
+						break;
+				}
+			}
+
+			return { max_index, max_count };
+		}
+
+		bool create(const std::vector<data_t>& data, std::uniform_int_distribution<uint>& m_dist)
 		{
 			std::vector<point> phi_hat;
 			phi_hat.reserve(r);
 			std::vector<opt_point> H_hat(m);
 			std::cout << "creating " << r << " buckets" << std::endl;
 
-			{
-				auto m_mod_r = m_bar % r_bar;
-				if (m_mod_r == 1 || m_mod_r == r - 1)
-				{
-					std::cout << "prime restart" << std::endl;
-					return false;
-				}
-			}
-
-			std::uniform_int_distribution<uint> dist(0, m - 1);
+			if (bad_m_r())
+				return false;
 
 			std::vector<std::vector<point>> buckets(r);
 
@@ -99,23 +122,11 @@ namespace psh
 			{
 				if (buckets.size() / 10 > 0 && i % (buckets.size() / 10) == 0)
 					std::cout << (100 * i) / buckets.size() << "% done" << std::endl;
-				uint max_index = 0;
 
-				// in hard mode we find the biggest bucket
-				uint max_count = 0;
-				for (uint j = 0; j < buckets.size(); j++)
-				{
-					if (buckets[j].size() > max_count
-						|| (easy && buckets[j].size() > 0))
-					{
-						max_count = buckets[j].size();
-						max_index = j;
+				uint max_index;
+				uint max_count;
+				std::tie(max_index, max_count) = best_bucket(buckets, easy);
 
-						// in easy mode we grab the first filled bucket
-						if (easy)
-							break;
-					}
-				}
 				// if the biggest bucket was size 1, switch to easy mode next time
 				if (max_count == 1)
 					easy = true;
@@ -123,7 +134,7 @@ namespace psh
 				if (max_count == 0)
 					break;
 
-				uint possible_offset = dist(generator);
+				uint possible_offset = m_dist(generator);
 				bool success = false;
 				for (uint k = 0; k < m; k++)
 				{
