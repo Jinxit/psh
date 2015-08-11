@@ -97,11 +97,49 @@ namespace psh
 			return { max_index, max_count };
 		}
 
+		void insert(const std::vector<point>& bucket, decltype(H)& H_hat, const decltype(phi)& phi_hat)
+		{
+			for (auto& element : bucket)
+			{
+				auto hashed = h(element, phi_hat);
+				H_hat[point_to_index(hashed, m_bar, m)] = element;
+			}
+		}
+
+		bool jiggle(decltype(H)& H_hat, decltype(phi)& phi_hat, uint max_index,
+			const std::vector<point>& bucket, std::uniform_int_distribution<uint>& m_dist)
+		{
+			uint possible_offset = m_dist(generator);
+			for (uint k = 0; k < m; k++)
+			{
+				possible_offset = (possible_offset + 1) % m;
+
+				phi_hat[max_index] = index_to_point(possible_offset, m_bar, m);
+
+				bool collision = false;
+				for (auto& element : bucket)
+				{
+					if (contains(element, H_hat, phi_hat))
+					{
+						collision = true;
+						break;
+					}
+				}
+
+				if (!collision)
+				{
+					insert(bucket, H_hat, phi_hat);
+					return true;
+				}
+			}
+			return false;
+		}
+
 		bool create(const std::vector<data_t>& data, std::uniform_int_distribution<uint>& m_dist)
 		{
-			std::vector<point> phi_hat;
+			decltype(phi) phi_hat;
 			phi_hat.reserve(r);
-			std::vector<opt_point> H_hat(m);
+			decltype(H) H_hat(m);
 			std::cout << "creating " << r << " buckets" << std::endl;
 
 			if (bad_m_r())
@@ -134,37 +172,7 @@ namespace psh
 				if (max_count == 0)
 					break;
 
-				uint possible_offset = m_dist(generator);
-				bool success = false;
-				for (uint k = 0; k < m; k++)
-				{
-					possible_offset = (possible_offset + 1) % m;
-
-					phi_hat[max_index] = index_to_point(possible_offset, m_bar, m);
-
-					bool already_used = false;
-					for (uint l = 0; l < buckets[max_index].size(); l++)
-					{
-						auto hashed = h(buckets[max_index][l], phi_hat);
-						if (H_hat[point_to_index(hashed, m_bar, m)])
-						{
-							already_used = true;
-							break;
-						}
-					}
-
-					if (!already_used)
-					{
-						success = true;
-						for (uint l = 0; l < buckets[max_index].size(); l++)
-						{
-							auto hashed = h(buckets[max_index][l], phi_hat);
-							H_hat[point_to_index(hashed, m_bar, m)] = buckets[max_index][l];
-						}
-						break;
-					}
-				}
-				if (!success)
+				if (!jiggle(H_hat, phi_hat, max_index, buckets[max_index], m_dist))
 				{
 					return false;
 				}
@@ -205,11 +213,11 @@ namespace psh
 			return output;
 		}
 
-		point h(const data_t& p, const std::vector<point>& temp_phi) const
+		point h(const data_t& p, const decltype(phi)& phi_hat) const
 		{
 			auto h0 = M0 * p;
 			auto h1 = M1 * p;
-			auto offset = temp_phi[point_to_index(h1, r_bar, r)];
+			auto offset = phi_hat[point_to_index(h1, r_bar, r)];
 			return h0 + offset;
 		}
 
@@ -225,6 +233,26 @@ namespace psh
 				return maybe_element.value();
 			else
 				throw std::out_of_range("Element not found in map");
+		}
+
+		bool contains(const data_t& p, const decltype(H)& H_hat, const decltype(phi)& phi_hat) const
+		{
+			return bool(H_hat[point_to_index(h(p, phi_hat), m_bar, m)]);
+		}
+
+		bool contains(const data_t& p) const
+		{
+			return contains(p, H, phi);
+		}
+
+		bool contains(uint index, const decltype(H)& H_hat) const
+		{
+			return bool(H_hat[index]);
+		}
+
+		bool contains(uint index) const
+		{
+			return contains(index, H);
 		}
 
 		uint memory_size()
