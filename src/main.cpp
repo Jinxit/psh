@@ -72,4 +72,9 @@ int main( int argc, const char* argv[] )
 	{
 		std::cout << "element not found, as expected" << std::endl;
 	}
+
+	std::cout << "class size: " << std::endl;
+	std::cout << s.memory_size() << " bytes" << std::endl;
+	std::cout << s.memory_size() / 1024 << " kb" << std::endl;
+	std::cout << s.memory_size() / (1024 * 1024) << " mb" << std::endl;
 }

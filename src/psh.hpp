@@ -209,5 +209,11 @@ namespace psh
 			else
 				throw std::out_of_range("Element not found in map");
 		}
+
+		uint memory_size()
+		{
+			return sizeof(*this) + sizeof(typename decltype(phi)::value_type) * phi.size()
+				+ sizeof(typename decltype(H)::value_type) * H.size();
+		}
 	};
 }
