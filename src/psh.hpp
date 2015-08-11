@@ -201,9 +201,13 @@ namespace psh
 			return h(p, phi);
 		}
 
-		opt_point get(const data_t& p) const
+		point get(const data_t& p) const
 		{
-			return H[point_to_index(h(p), m_bar, m)];
+			auto maybe_element = H[point_to_index(h(p), m_bar, m)];
+			if (maybe_element)
+				return maybe_element.value();
+			else
+				throw std::out_of_range("Element not found in map");
 		}
 	};
 }

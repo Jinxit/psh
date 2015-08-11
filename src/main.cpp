@@ -17,6 +17,8 @@ int main( int argc, const char* argv[] )
 			{
 				if (rand() % 20 == 0)
 				{
+					if (x == 10 && y == 10 && z == 10)
+						continue;
 					data.emplace_back(x, y, z);
 				}
 			}
@@ -30,18 +32,22 @@ int main( int argc, const char* argv[] )
 	std::cout << "verifying" << std::endl;
 	for (auto& element : data)
 	{
-		auto hashed = s.get(element);
-		if (!hashed)
+		data_t found;
+		try
+		{
+			found = s.get(element);
+		}
+		catch (const std::out_of_range& e)
 		{
 			std::cout << "element not found in hash!" << std::endl;
 			std::cout << element << std::endl;
 			failed = true;
 		}
-		else if (element != hashed.value())
+		if (element != found)
 		{
 			std::cout << "element different in hash!" << std::endl;
 			std::cout << element << std::endl;
-			std::cout << hashed.value() << std::endl;
+			std::cout << found << std::endl;
 			failed = true;
 		}
 	}
@@ -55,4 +61,15 @@ int main( int argc, const char* argv[] )
 	std::cout << "r_bar: " << s.r_bar << " * " << s.r_bar << " = " << s.r_bar * s.r_bar << std::endl;
 	std::cout << "compression factor: " << float(s.r_bar * s.r_bar + s.m_bar * s.m_bar)
 		/ (width * width) << " (less is better)" << std::endl;
+
+	try
+	{
+		auto found = s.get(data_t(10, 10, 10));
+		std::cout << "found non-existing element!" << std::endl;
+		VALUE(found);
+	}
+	catch (const std::out_of_range& e)
+	{
+		std::cout << "element not found, as expected" << std::endl;
+	}
 }
