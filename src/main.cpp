@@ -1,6 +1,7 @@
 #include "psh.hpp"
 #include <experimental/optional>
 #include <iostream>
+#include <chrono>
 
 int main( int argc, const char* argv[] )
 {
@@ -8,7 +9,7 @@ int main( int argc, const char* argv[] )
 	using set = psh::set<3, data_t>;
 
 	std::vector<data_t> data;
-	int width = 128;
+	int width = 180;
 	for (int x = 0; x < width; x++)
 	{
 		for (int y = 0; y < width; y++)
@@ -26,7 +27,9 @@ int main( int argc, const char* argv[] )
 	}
 	std::cout << "data size: " << data.size() << std::endl;
 
+	auto start_time = std::chrono::high_resolution_clock::now();
 	set s(data);
+	auto stop_time = std::chrono::high_resolution_clock::now();
 
 	bool failed = false;
 	std::cout << "verifying" << std::endl;
@@ -76,5 +79,9 @@ int main( int argc, const char* argv[] )
 	std::cout << "class size: " << std::endl;
 	std::cout << s.memory_size() << " bytes" << std::endl;
 	std::cout << s.memory_size() / 1024 << " kb" << std::endl;
-	std::cout << s.memory_size() / (1024 * 1024) << " mb" << std::endl;
+	std::cout << s.memory_size() / (1024 * 1024.0f) << " mb" << std::endl;
+
+	std::cout << "set creation time: " << std::endl;
+	std::cout << std::chrono::duration_cast<std::chrono::milliseconds>
+		(stop_time - start_time).count() / 1000.0f << " seconds" << std::endl;
 }
