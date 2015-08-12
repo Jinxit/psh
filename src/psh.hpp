@@ -16,15 +16,21 @@ namespace psh
 {
 	using uint = long unsigned int;
 
-	template<uint d, class data_t>
+	template<uint d, class T>
 	class set
 	{
 		static_assert(d > 0, "d must be larger than 0.");
 	public:
 		using point = Eigen::Matrix<uint, d, 1>;
-		using opt_point = std::experimental::optional<point>;
+		using opt_T = std::experimental::optional<T>;
 
-		struct bucket : public std::vector<point>
+		struct data_t
+		{
+			point location;
+			T contents;
+		};
+
+		struct bucket : public std::vector<data_t>
 		{
 			uint phi_index;
 
@@ -42,7 +48,7 @@ namespace psh
 		uint r_bar;
 		uint r;
 		std::vector<point> phi;
-		std::vector<opt_point> H;
+		std::vector<opt_T> H;
 		std::default_random_engine generator;
 
 		set(const std::vector<data_t>& data)
@@ -90,8 +96,8 @@ namespace psh
 		{
 			for (auto& element : b)
 			{
-				auto hashed = h(element, phi_hat);
-				H_hat[point_to_index(hashed, m_bar, m)] = element;
+				auto hashed = h(element.location, phi_hat);
+				H_hat[point_to_index(hashed, m_bar, m)] = element.contents;
 			}
 		}
 
@@ -108,7 +114,7 @@ namespace psh
 				bool collision = false;
 				for (auto& element : b)
 				{
-					if (contains(element, H_hat, phi_hat))
+					if (contains(element.location, H_hat, phi_hat))
 					{
 						collision = true;
 						break;
@@ -137,7 +143,7 @@ namespace psh
 
 			for (auto& element : data)
 			{
-				auto h1 = M1 * element;
+				auto h1 = M1 * element.location;
 				buckets[point_to_index(h1, r_bar, r)].push_back(element);
 			}
 
@@ -209,7 +215,7 @@ namespace psh
 			return output;
 		}
 
-		point h(const data_t& p, const decltype(phi)& phi_hat) const
+		point h(const point& p, const decltype(phi)& phi_hat) const
 		{
 			auto h0 = M0 * p;
 			auto h1 = M1 * p;
@@ -217,12 +223,12 @@ namespace psh
 			return h0 + offset;
 		}
 
-		point h(const data_t& p) const
+		point h(const point& p) const
 		{
 			return h(p, phi);
 		}
 
-		point get(const data_t& p) const
+		T get(const point& p) const
 		{
 			auto maybe_element = H[point_to_index(h(p), m_bar, m)];
 			if (maybe_element)
@@ -231,14 +237,36 @@ namespace psh
 				throw std::out_of_range("Element not found in map");
 		}
 
-		bool contains(const data_t& p, const decltype(H)& H_hat, const decltype(phi)& phi_hat) const
+		bool contains(const data_t& data, const decltype(H)& H_hat, const decltype(phi)& phi_hat) const
+		{
+			auto found = H_hat[point_to_index(h(data.location, phi_hat), m_bar, m)];
+			return bool(found) && found == data.contents;
+		}
+
+		bool contains(const data_t& data) const
+		{
+			return contains(data, H, phi);
+		}
+
+		bool contains(const point& p, const decltype(H)& H_hat, const decltype(phi)& phi_hat) const
 		{
 			return bool(H_hat[point_to_index(h(p, phi_hat), m_bar, m)]);
 		}
 
-		bool contains(const data_t& p) const
+		bool contains(const point& p) const
 		{
 			return contains(p, H, phi);
+		}
+
+		bool contains(uint index, const data_t& data, const decltype(H)& H_hat) const
+		{
+			auto found = H_hat[index];
+			return bool(found) && found == data.contents;
+		}
+
+		bool contains(uint index, const data_t& data) const
+		{
+			return contains(index, data, H);
 		}
 
 		bool contains(uint index, const decltype(H)& H_hat) const
