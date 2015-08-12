@@ -8,9 +8,7 @@
 #include <vector>
 #include <utility>
 #include <Eigen/Dense>
-#include "tbb/parallel_for.h"
 #include "tbb/parallel_sort.h"
-#include "tbb/blocked_range.h"
 
 #define VALUE(x) std::cout << #x "=" << x << std::endl
 
