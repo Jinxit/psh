@@ -4,7 +4,6 @@
 #include <random>
 #include <experimental/optional>
 #include <iostream>
-#include <set>
 #include <vector>
 #include <utility>
 #include <Eigen/Dense>
@@ -17,7 +16,7 @@ namespace psh
 	using uint = long unsigned int;
 
 	template<uint d, class T>
-	class set
+	class map
 	{
 		static_assert(d > 0, "d must be larger than 0.");
 	public:
@@ -51,7 +50,7 @@ namespace psh
 		std::vector<opt_T> H;
 		std::default_random_engine generator;
 
-		set(const std::vector<data_t>& data)
+		map(const std::vector<data_t>& data)
 			: n(data.size()), m_bar(std::ceil(std::pow(n, 1.0f / d))), m(std::pow(m_bar, d)),
 			  r_bar(std::ceil(std::pow(n / d, 1.0f / d)) - 1), generator(time(0))
 		{

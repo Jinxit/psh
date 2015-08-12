@@ -27,9 +27,9 @@ struct dumb
 
 int main( int argc, const char* argv[] )
 {
-	using set = psh::set<3, dumb>;
+	using map = psh::map<3, dumb>;
 
-	std::vector<set::data_t> data;
+	std::vector<map::data_t> data;
 	uint width = 256;
 	for (uint x = 0; x < width; x++)
 	{
@@ -42,8 +42,8 @@ int main( int argc, const char* argv[] )
 					if (x == 10 && y == 10 && z == 10)
 						continue;
 					data.push_back(
-						set::data_t{
-							set::point(x, y, z),
+						map::data_t{
+							map::point(x, y, z),
 							dumb{float(x) / width, float(y) / width, float(1) / width}
 						});
 				}
@@ -53,7 +53,7 @@ int main( int argc, const char* argv[] )
 	std::cout << "data size: " << data.size() << std::endl;
 
 	auto start_time = std::chrono::high_resolution_clock::now();
-	set s(data);
+	map s(data);
 	auto stop_time = std::chrono::high_resolution_clock::now();
 
 	bool failed = false;
@@ -84,7 +84,7 @@ int main( int argc, const char* argv[] )
 	else
 		std::cout << "success!" << std::endl;
 
-	auto original_data_size = width * width * width * (sizeof(dumb) + sizeof(set::point));
+	auto original_data_size = width * width * width * (sizeof(dumb) + sizeof(map::point));
 	std::cout << "original data: " << (original_data_size / (1024 * 1024.0f)) << " mb)" << std::endl;
 	std::cout << "m_bar: " << s.m_bar << " ^ 3 = " << std::pow(s.m_bar, 3) << std::endl;
 	std::cout << "r_bar: " << s.r_bar << " ^ 3 = " << std::pow(s.r_bar, 3) << std::endl;
@@ -101,7 +101,7 @@ int main( int argc, const char* argv[] )
 
 	try
 	{
-		auto found = s.get(set::point{10, 10, 10});
+		auto found = s.get(map::point{10, 10, 10});
 		std::cout << "found non-existing element!" << std::endl;
 		VALUE(found);
 	}
@@ -110,7 +110,7 @@ int main( int argc, const char* argv[] )
 		std::cout << "element not found, as expected" << std::endl;
 	}
 
-	std::cout << "set creation time: " << std::endl;
+	std::cout << "map creation time: " << std::endl;
 	std::cout << std::chrono::duration_cast<std::chrono::milliseconds>
 		(stop_time - start_time).count() / 1000.0f << " seconds" << std::endl;
 }
