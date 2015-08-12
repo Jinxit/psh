@@ -8,6 +8,9 @@
 #include <vector>
 #include <utility>
 #include <Eigen/Dense>
+#include "tbb/parallel_for.h"
+#include "tbb/parallel_sort.h"
+#include "tbb/blocked_range.h"
 
 #define VALUE(x) std::cout << #x "=" << x << std::endl
 
@@ -23,6 +26,16 @@ namespace psh
 		using point = Eigen::Matrix<uint, d, 1>;
 		using opt_point = std::experimental::optional<point>;
 
+		struct bucket : public std::vector<point>
+		{
+			uint phi_index;
+
+			bucket(uint phi_index) : phi_index(phi_index) { }
+			friend bool operator<(const bucket& lhs, const bucket& rhs) {
+				return lhs.size() > rhs.size();
+			}
+		};
+
 		uint M0;
 		uint M1;
 		uint n;
@@ -36,7 +49,7 @@ namespace psh
 
 		set(const std::vector<data_t>& data)
 			: n(data.size()), m_bar(std::ceil(std::pow(n, 1.0f / d))), m(std::pow(m_bar, d)),
-			  r_bar(std::ceil(std::pow(n / (2 * d), 1.0f / d)) - 1), generator(time(0))
+			  r_bar(std::ceil(std::pow(n / d, 1.0f / d)) - 1), generator(time(0))
 		{
 			M0 = prime();
 			while ((M1 = prime()) == M0);
@@ -75,49 +88,27 @@ namespace psh
 			return m_mod_r == 1 || m_mod_r == r - 1;
 		}
 
-		std::pair<uint, uint> best_bucket(const std::vector<std::vector<point>>& buckets, bool easy)
+		void insert(const bucket& b, decltype(H)& H_hat, const decltype(phi)& phi_hat)
 		{
-			uint max_index = 0;
-			uint max_count = 0;
-			for (uint j = 0; j < buckets.size(); j++)
-			{
-				// in hard mode we find the biggest bucket
-				if (buckets[j].size() > max_count
-					|| (easy && buckets[j].size() > 0))
-				{
-					max_count = buckets[j].size();
-					max_index = j;
-
-					// in easy mode we grab the first non-empty bucket
-					if (easy)
-						break;
-				}
-			}
-
-			return { max_index, max_count };
-		}
-
-		void insert(const std::vector<point>& bucket, decltype(H)& H_hat, const decltype(phi)& phi_hat)
-		{
-			for (auto& element : bucket)
+			for (auto& element : b)
 			{
 				auto hashed = h(element, phi_hat);
 				H_hat[point_to_index(hashed, m_bar, m)] = element;
 			}
 		}
 
-		bool jiggle_offsets(decltype(H)& H_hat, decltype(phi)& phi_hat, uint max_index,
-			const std::vector<point>& bucket, std::uniform_int_distribution<uint>& m_dist)
+		bool jiggle_offsets(decltype(H)& H_hat, decltype(phi)& phi_hat,
+			const bucket& b, std::uniform_int_distribution<uint>& m_dist)
 		{
 			uint possible_offset = m_dist(generator);
 			for (uint k = 0; k < m; k++)
 			{
 				possible_offset = (possible_offset + 1) % m;
 
-				phi_hat[max_index] = index_to_point(possible_offset, m_bar, m);
+				phi_hat[b.phi_index] = index_to_point(possible_offset, m_bar, m);
 
 				bool collision = false;
-				for (auto& element : bucket)
+				for (auto& element : b)
 				{
 					if (contains(element, H_hat, phi_hat))
 					{
@@ -128,22 +119,34 @@ namespace psh
 
 				if (!collision)
 				{
-					insert(bucket, H_hat, phi_hat);
+					insert(b, H_hat, phi_hat);
 					return true;
 				}
 			}
 			return false;
 		}
 
-		std::vector<std::vector<point>> create_buckets(const std::vector<data_t>& data)
+		std::vector<bucket> create_buckets(const std::vector<data_t>& data)
 		{
-			std::vector<std::vector<point>> buckets(r);
+			std::vector<bucket> buckets;
+			buckets.reserve(r);
+			{
+				uint i = 0;
+				std::generate_n(std::back_inserter(buckets), r, [&] {
+						return bucket(i++);
+					});
+			}
 
 			for (auto& element : data)
 			{
 				auto h1 = M1 * element;
 				buckets[point_to_index(h1, r_bar, r)].push_back(element);
 			}
+
+			std::cout << "buckets created" << std::endl;
+
+			tbb::parallel_sort(buckets.begin(), buckets.end());
+			std::cout << "buckets sorted" << std::endl;
 
 			return buckets;
 		}
@@ -159,31 +162,19 @@ namespace psh
 				return false;
 
 			auto buckets = create_buckets(data);
+			std::cout << "jiggling offsets" << std::endl;
 
-			std::cout << "buckets created, jiggling offsets" << std::endl;
-
-			bool easy = false;
 			for (uint i = 0; i < buckets.size(); i++)
 			{
-				if (buckets.size() / 10 > 0 && i % (buckets.size() / 10) == 0)
+				if (buckets.size() == 0)
+					break;
+				if (i % (buckets.size() / 10) == 0)
 					std::cout << (100 * i) / buckets.size() << "% done" << std::endl;
 
-				uint max_index;
-				uint max_count;
-				std::tie(max_index, max_count) = best_bucket(buckets, easy);
-
-				// if the biggest bucket was size 1, switch to easy mode next time
-				if (max_count == 1)
-					easy = true;
-				// if the biggest bucket was zero, we done
-				if (max_count == 0)
-					break;
-
-				if (!jiggle_offsets(H_hat, phi_hat, max_index, buckets[max_index], m_dist))
+				if (!jiggle_offsets(H_hat, phi_hat, buckets[i], m_dist))
 				{
 					return false;
 				}
-				buckets[max_index].clear();
 			}
 
 			std::cout << "done!" << std::endl;
