@@ -226,26 +226,51 @@ namespace psh
 
 		constexpr uint point_to_index(const point& p, uint width, uint max) const
 		{
-			uint index = p[0];
-			for (uint i = 1; i < d; i++)
+			if (d == 2)
 			{
-				index += uint(std::pow(width, i)) * p[i];
+				return (p[0] + width * p[1]) % max;
 			}
-			return index % max;
+			else if (d == 3)
+			{
+				return (p[0] + width * p[1] + width * width * p[2]) % max;
+			}
+			else
+			{
+				uint index = p[0];
+				for (uint i = 1; i < d; i++)
+				{
+					index += uint(std::pow(width, i)) * p[i];
+				}
+				return index % max;
+			}
 		}
 
 		constexpr point index_to_point(uint index, uint width, uint max) const
 		{
 			point output;
-			max /= width;
-			for (uint i = 0; i < d; i++)
+			if (d == 2)
 			{
-				output[i] = index / max;
-				index = index % max;
-
-				if (i + 1 < d)
+				output << index / width, index % width;
+			}
+			else if (d == 3)
+			{
+				output <<
+					index / (width * width),
+					(index % (width * width)) / width,
+					(index % (width * width)) % width;
+			}
+			else
+			{
+				max /= width;
+				for (uint i = 0; i < d; i++)
 				{
-					max /= width;
+					output[i] = index / max;
+					index = index % max;
+
+					if (i + 1 < d)
+					{
+						max /= width;
+					}
 				}
 			}
 
