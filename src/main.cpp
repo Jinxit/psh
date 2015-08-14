@@ -85,9 +85,9 @@ int main( int argc, const char* argv[] )
 		std::cout << "success!" << std::endl;
 
 	auto original_data_size = width * width * width * (sizeof(dumb) + sizeof(map::point));
-	std::cout << "original data: " << (original_data_size / (1024 * 1024.0f)) << " mb)" << std::endl;
-	std::cout << "m_bar: " << s.m_bar << " ^ 3 = " << std::pow(s.m_bar, 3) << std::endl;
-	std::cout << "r_bar: " << s.r_bar << " ^ 3 = " << std::pow(s.r_bar, 3) << std::endl;
+	std::cout << "original data: " << (original_data_size / (1024 * 1024.0f)) << " mb" << std::endl;
+	std::cout << "m_bar: " << s.m_bar << " ^ 3 = " << uint(std::pow(s.m_bar, 3)) << std::endl;
+	std::cout << "r_bar: " << s.r_bar << " ^ 3 = " << uint(std::pow(s.r_bar, 3)) << std::endl;
 
 	std::cout << "class size: " << std::endl;
 	std::cout << s.memory_size() << " bytes" << std::endl;
@@ -95,7 +95,7 @@ int main( int argc, const char* argv[] )
 	std::cout << s.memory_size() / (1024 * 1024.0f) << " mb" << std::endl;
 
 	std::cout << "compression factor vs dense: " << (float(s.memory_size())
-		/ (std::pow(width, 3) * sizeof(dumb))) << std::endl;
+		/ (uint(std::pow(width, 3)) * sizeof(dumb))) << std::endl;
 	std::cout << "compression factor vs sparse: " << (float(s.memory_size())
 		/ (sizeof(data) + sizeof(decltype(data)::value_type) * data.size())) << std::endl;
 
