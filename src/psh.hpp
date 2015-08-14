@@ -8,6 +8,8 @@
 #include <utility>
 #include <Eigen/Dense>
 #include "tbb/parallel_sort.h"
+#include "tbb/mutex.h"
+#include "tbb/pipeline.h"
 
 #define VALUE(x) std::cout << #x "=" << x << std::endl
 
@@ -103,28 +105,64 @@ namespace psh
 		bool jiggle_offsets(decltype(H)& H_hat, decltype(phi)& phi_hat,
 			const bucket& b, std::uniform_int_distribution<uint>& m_dist)
 		{
-			uint possible_offset = m_dist(generator);
-			for (uint k = 0; k < m; k++)
-			{
-				possible_offset = (possible_offset + 1) % m;
+			uint start_offset = m_dist(generator);
 
-				phi_hat[b.phi_index] = index_to_point(possible_offset, m_bar, m);
+			bool found = false;
+			point found_offset;
+			tbb::mutex mutex;
 
-				bool collision = false;
-				for (auto& element : b)
-				{
-					if (contains(element.location, H_hat, phi_hat))
+			uint chunk_index = 0;
+			const uint num_cores = 8;
+			const uint group_size = r / num_cores + 1;
+
+			tbb::parallel_pipeline(num_cores,
+				tbb::make_filter<void, uint>(tbb::filter::serial,
+					[=, &chunk_index, &found, &group_size](tbb::flow_control& fc) {
+						if (found || chunk_index >= r)
+						{
+							fc.stop();
+						}
+						chunk_index += group_size;
+						return chunk_index;
+					}) &
+				tbb::make_filter<uint, void>(tbb::filter::parallel,
+					[=, &mutex, &found, &found_offset, &b, &phi_hat, &H_hat](uint i0)
 					{
-						collision = true;
-						break;
-					}
-				}
+						for (uint i = i0; i < i0 + group_size && !found; i++)
+						{
+							auto phi_offset = index_to_point((start_offset + i) % m, m_bar, m);
 
-				if (!collision)
-				{
-					insert(b, H_hat, phi_hat);
-					return true;
-				}
+							bool collision = false;
+							for (auto& element : b)
+							{
+								auto h0 = M0 * element.location;
+								auto h1 = M1 * element.location;
+								auto index = point_to_index(h1, r_bar, r);
+								auto offset = index == b.phi_index ? phi_offset : phi_hat[index];
+								auto hash = h0 + offset;
+
+								collision = bool(H_hat[point_to_index(hash, m_bar, m)]);
+								if (collision)
+									break;
+							}
+
+							if (!collision)
+							{
+								tbb::mutex::scoped_lock lock(mutex);
+								if (!found)
+								{
+									found = true;
+									found_offset = phi_offset;
+								}
+							}
+						}
+					})
+				);
+			if (found)
+			{
+				phi_hat[b.phi_index] = found_offset;
+				insert(b, H_hat, phi_hat);
+				return true;
 			}
 			return false;
 		}
@@ -169,7 +207,7 @@ namespace psh
 
 			for (uint i = 0; i < buckets.size(); i++)
 			{
-				if (buckets.size() == 0)
+				if (buckets[i].size() == 0)
 					break;
 				if (i % (buckets.size() / 10) == 0)
 					std::cout << (100 * i) / buckets.size() << "% done" << std::endl;
