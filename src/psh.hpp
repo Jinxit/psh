@@ -6,7 +6,6 @@
 #include <iostream>
 #include <vector>
 #include <utility>
-#include <Eigen/Dense>
 #include "tbb/parallel_sort.h"
 #include "tbb/mutex.h"
 #include "tbb/pipeline.h"
@@ -17,17 +16,61 @@ namespace psh
 {
 	using uint = long unsigned int;
 
+	template<uint d>
+	struct point
+	{
+		uint data[d]{0};
+
+		const uint& operator[](uint i) const { return data[i]; }
+		uint& operator[](uint i) { return data[i]; }
+
+		template<class F>
+		friend point operator*(const point& p, F scalar)
+		{
+			point output = p;
+			for (uint i = 0; i < d; i++)
+				output[i] *= scalar;
+			return output;
+		}
+		template<class F>
+		friend point operator*(F scalar, const point& p)
+		{
+			return p * scalar;
+		}
+
+		template<class F>
+		friend point operator+(const point& p, F scalar)
+		{
+			point output = p;
+			for (uint i = 0; i < d; i++)
+				output[i] += scalar;
+			return output;
+		}
+		template<class F>
+		friend point operator+(F scalar, const point& p)
+		{
+			return p + scalar;
+		}
+
+		friend point operator+(const point& lhs, const point& rhs)
+		{
+			point output = lhs;
+			for (uint i = 0; i < d; i++)
+				output[i] += rhs[i];
+			return output;
+		}
+	};
+
 	template<uint d, class T>
 	class map
 	{
 		static_assert(d > 0, "d must be larger than 0.");
 	public:
-		using point = Eigen::Matrix<uint, d, 1>;
 		using opt_T = std::experimental::optional<T>;
 
 		struct data_t
 		{
-			point location;
+			point<d> location;
 			T contents;
 		};
 
@@ -48,7 +91,7 @@ namespace psh
 		uint m;
 		uint r_bar;
 		uint r;
-		std::vector<point> phi;
+		std::vector<point<d>> phi;
 		std::vector<opt_T> H;
 		std::default_random_engine generator;
 
@@ -108,7 +151,7 @@ namespace psh
 			uint start_offset = m_dist(generator);
 
 			bool found = false;
-			point found_offset;
+			point<d> found_offset;
 			tbb::mutex mutex;
 
 			uint chunk_index = 0;
@@ -194,8 +237,7 @@ namespace psh
 
 		bool create(const std::vector<data_t>& data, std::uniform_int_distribution<uint>& m_dist)
 		{
-			decltype(phi) phi_hat;
-			phi_hat.reserve(r);
+			decltype(phi) phi_hat(r);
 			decltype(H) H_hat(m);
 			std::cout << "creating " << r << " buckets" << std::endl;
 
@@ -219,12 +261,13 @@ namespace psh
 			}
 
 			std::cout << "done!" << std::endl;
+			std::cout << "phi_hat.size() = " << phi_hat.size() << std::endl;
 			phi = std::move(phi_hat);
 			H = std::move(H_hat);
 			return true;
 		}
 
-		constexpr uint point_to_index(const point& p, uint width, uint max) const
+		constexpr uint point_to_index(const point<d>& p, uint width, uint max) const
 		{
 			if (d == 2)
 			{
@@ -245,22 +288,22 @@ namespace psh
 			}
 		}
 
-		constexpr point index_to_point(uint index, uint width, uint max) const
+		constexpr point<d> index_to_point(uint index, uint width, uint max) const
 		{
-			point output;
 			if (d == 2)
 			{
-				output << index / width, index % width;
+				return point<d>{index / width, index % width};
 			}
 			else if (d == 3)
 			{
-				output <<
+				return point<d>{
 					index / (width * width),
 					(index % (width * width)) / width,
-					(index % (width * width)) % width;
+					(index % (width * width)) % width};
 			}
 			else
 			{
+				point<d> output;
 				max /= width;
 				for (uint i = 0; i < d; i++)
 				{
@@ -272,12 +315,12 @@ namespace psh
 						max /= width;
 					}
 				}
+				return output;
 			}
 
-			return output;
 		}
 
-		point h(const point& p, const decltype(phi)& phi_hat) const
+		point<d> h(const point<d>& p, const decltype(phi)& phi_hat) const
 		{
 			auto h0 = M0 * p;
 			auto h1 = M1 * p;
@@ -285,12 +328,12 @@ namespace psh
 			return h0 + offset;
 		}
 
-		point h(const point& p) const
+		point<d> h(const point<d>& p) const
 		{
 			return h(p, phi);
 		}
 
-		T get(const point& p) const
+		T get(const point<d>& p) const
 		{
 			auto maybe_element = H[point_to_index(h(p), m_bar, m)];
 			if (maybe_element)
@@ -310,12 +353,12 @@ namespace psh
 			return contains(data, H, phi);
 		}
 
-		bool contains(const point& p, const decltype(H)& H_hat, const decltype(phi)& phi_hat) const
+		bool contains(const point<d>& p, const decltype(H)& H_hat, const decltype(phi)& phi_hat) const
 		{
 			return bool(H_hat[point_to_index(h(p, phi_hat), m_bar, m)]);
 		}
 
-		bool contains(const point& p) const
+		bool contains(const point<d>& p) const
 		{
 			return contains(p, H, phi);
 		}
@@ -341,7 +384,7 @@ namespace psh
 			return contains(index, H);
 		}
 
-		uint memory_size()
+		uint memory_size() const
 		{
 			return sizeof(*this) + sizeof(typename decltype(phi)::value_type) * phi.size()
 				+ sizeof(typename decltype(H)::value_type) * H.size();

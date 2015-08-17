@@ -43,7 +43,7 @@ int main( int argc, const char* argv[] )
 						continue;
 					data.push_back(
 						map::data_t{
-							map::point(x, y, z),
+							psh::point<3>{x, y, z},
 							dumb{float(x) / width, float(y) / width, float(1) / width}
 						});
 				}
@@ -84,7 +84,7 @@ int main( int argc, const char* argv[] )
 	else
 		std::cout << "success!" << std::endl;
 
-	auto original_data_size = width * width * width * (sizeof(dumb) + sizeof(map::point));
+	auto original_data_size = width * width * width * (sizeof(dumb) + sizeof(psh::point<3>));
 	std::cout << "original data: " << (original_data_size / (1024 * 1024.0f)) << " mb" << std::endl;
 	std::cout << "m_bar: " << s.m_bar << " ^ 3 = " << uint(std::pow(s.m_bar, 3)) << std::endl;
 	std::cout << "r_bar: " << s.r_bar << " ^ 3 = " << uint(std::pow(s.r_bar, 3)) << std::endl;
@@ -101,7 +101,7 @@ int main( int argc, const char* argv[] )
 
 	try
 	{
-		auto found = s.get(map::point{10, 10, 10});
+		auto found = s.get(psh::point<3>{10, 10, 10});
 		std::cout << "found non-existing element!" << std::endl;
 		VALUE(found);
 	}
