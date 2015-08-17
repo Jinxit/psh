@@ -1,73 +1,27 @@
+#pragma once
+
 #include <string>
 #include <functional>
 #include <cmath>
 #include <random>
-#include <experimental/optional>
 #include <iostream>
 #include <vector>
 #include <utility>
 #include "tbb/parallel_sort.h"
 #include "tbb/mutex.h"
 #include "tbb/pipeline.h"
+#include "util.hpp"
+#include "point.hpp"
 
 #define VALUE(x) std::cout << #x "=" << x << std::endl
 
 namespace psh
 {
-	using uint = long unsigned int;
-
-	template<uint d>
-	struct point
-	{
-		uint data[d]{0};
-
-		const uint& operator[](uint i) const { return data[i]; }
-		uint& operator[](uint i) { return data[i]; }
-
-		template<class F>
-		friend point operator*(const point& p, F scalar)
-		{
-			point output = p;
-			for (uint i = 0; i < d; i++)
-				output[i] *= scalar;
-			return output;
-		}
-		template<class F>
-		friend point operator*(F scalar, const point& p)
-		{
-			return p * scalar;
-		}
-
-		template<class F>
-		friend point operator+(const point& p, F scalar)
-		{
-			point output = p;
-			for (uint i = 0; i < d; i++)
-				output[i] += scalar;
-			return output;
-		}
-		template<class F>
-		friend point operator+(F scalar, const point& p)
-		{
-			return p + scalar;
-		}
-
-		friend point operator+(const point& lhs, const point& rhs)
-		{
-			point output = lhs;
-			for (uint i = 0; i < d; i++)
-				output[i] += rhs[i];
-			return output;
-		}
-	};
-
 	template<uint d, class T>
 	class map
 	{
 		static_assert(d > 0, "d must be larger than 0.");
 	public:
-		using opt_T = std::experimental::optional<T>;
-
 		struct data_t
 		{
 			point<d> location;
@@ -92,7 +46,8 @@ namespace psh
 		uint r_bar;
 		uint r;
 		std::vector<point<d>> phi;
-		std::vector<opt_T> H;
+		std::vector<bool> H_b;
+		std::vector<T> H;
 		std::default_random_engine generator;
 
 		map(const std::vector<data_t>& data)
@@ -136,17 +91,21 @@ namespace psh
 			return m_mod_r == 1 || m_mod_r == r - 1;
 		}
 
-		void insert(const bucket& b, decltype(H)& H_hat, const decltype(phi)& phi_hat)
+		void insert(const bucket& b, decltype(H)& H_hat, decltype(H_b)& H_b_hat,
+			const decltype(phi)& phi_hat)
 		{
 			for (auto& element : b)
 			{
 				auto hashed = h(element.location, phi_hat);
-				H_hat[point_to_index(hashed, m_bar, m)] = element.contents;
+				auto i = point_to_index<d>(hashed, m_bar, m);
+				H_hat[i] = element.contents;
+				H_b_hat[i] = true;
 			}
 		}
 
-		bool jiggle_offsets(decltype(H)& H_hat, decltype(phi)& phi_hat,
-			const bucket& b, std::uniform_int_distribution<uint>& m_dist)
+		bool jiggle_offsets(decltype(H)& H_hat, decltype(H_b)& H_b_hat,
+			decltype(phi)& phi_hat, const bucket& b,
+			std::uniform_int_distribution<uint>& m_dist)
 		{
 			uint start_offset = m_dist(generator);
 
@@ -169,22 +128,22 @@ namespace psh
 						return chunk_index;
 					}) &
 				tbb::make_filter<uint, void>(tbb::filter::parallel,
-					[=, &mutex, &found, &found_offset, &b, &phi_hat, &H_hat](uint i0)
+					[=, &mutex, &found, &found_offset, &b, &phi_hat, &H_hat, &H_b_hat](uint i0)
 					{
 						for (uint i = i0; i < i0 + group_size && !found; i++)
 						{
-							auto phi_offset = index_to_point((start_offset + i) % m, m_bar, m);
+							auto phi_offset = index_to_point<d>((start_offset + i) % m, m_bar, m);
 
 							bool collision = false;
 							for (auto& element : b)
 							{
 								auto h0 = M0 * element.location;
 								auto h1 = M1 * element.location;
-								auto index = point_to_index(h1, r_bar, r);
+								auto index = point_to_index<d>(h1, r_bar, r);
 								auto offset = index == b.phi_index ? phi_offset : phi_hat[index];
 								auto hash = h0 + offset;
 
-								collision = bool(H_hat[point_to_index(hash, m_bar, m)]);
+								collision = H_b_hat[point_to_index<d>(hash, m_bar, m)];
 								if (collision)
 									break;
 							}
@@ -204,7 +163,7 @@ namespace psh
 			if (found)
 			{
 				phi_hat[b.phi_index] = found_offset;
-				insert(b, H_hat, phi_hat);
+				insert(b, H_hat, H_b_hat, phi_hat);
 				return true;
 			}
 			return false;
@@ -224,7 +183,7 @@ namespace psh
 			for (auto& element : data)
 			{
 				auto h1 = M1 * element.location;
-				buckets[point_to_index(h1, r_bar, r)].push_back(element);
+				buckets[point_to_index<d>(h1, r_bar, r)].push_back(element);
 			}
 
 			std::cout << "buckets created" << std::endl;
@@ -237,8 +196,11 @@ namespace psh
 
 		bool create(const std::vector<data_t>& data, std::uniform_int_distribution<uint>& m_dist)
 		{
-			decltype(phi) phi_hat(r);
-			decltype(H) H_hat(m);
+			decltype(phi) phi_hat;
+			phi_hat.reserve(r);
+			decltype(H) H_hat;
+			H_hat.reserve(m);
+			decltype(H_b) H_b_hat(m, false);
 			std::cout << "creating " << r << " buckets" << std::endl;
 
 			if (bad_m_r())
@@ -254,77 +216,24 @@ namespace psh
 				if (i % (buckets.size() / 10) == 0)
 					std::cout << (100 * i) / buckets.size() << "% done" << std::endl;
 
-				if (!jiggle_offsets(H_hat, phi_hat, buckets[i], m_dist))
+				if (!jiggle_offsets(H_hat, H_b_hat, phi_hat, buckets[i], m_dist))
 				{
 					return false;
 				}
 			}
 
 			std::cout << "done!" << std::endl;
-			std::cout << "phi_hat.size() = " << phi_hat.size() << std::endl;
 			phi = std::move(phi_hat);
 			H = std::move(H_hat);
+			H_b = std::move(H_b_hat);
 			return true;
-		}
-
-		constexpr uint point_to_index(const point<d>& p, uint width, uint max) const
-		{
-			if (d == 2)
-			{
-				return (p[0] + width * p[1]) % max;
-			}
-			else if (d == 3)
-			{
-				return (p[0] + width * p[1] + width * width * p[2]) % max;
-			}
-			else
-			{
-				uint index = p[0];
-				for (uint i = 1; i < d; i++)
-				{
-					index += uint(std::pow(width, i)) * p[i];
-				}
-				return index % max;
-			}
-		}
-
-		constexpr point<d> index_to_point(uint index, uint width, uint max) const
-		{
-			if (d == 2)
-			{
-				return point<d>{index / width, index % width};
-			}
-			else if (d == 3)
-			{
-				return point<d>{
-					index / (width * width),
-					(index % (width * width)) / width,
-					(index % (width * width)) % width};
-			}
-			else
-			{
-				point<d> output;
-				max /= width;
-				for (uint i = 0; i < d; i++)
-				{
-					output[i] = index / max;
-					index = index % max;
-
-					if (i + 1 < d)
-					{
-						max /= width;
-					}
-				}
-				return output;
-			}
-
 		}
 
 		point<d> h(const point<d>& p, const decltype(phi)& phi_hat) const
 		{
 			auto h0 = M0 * p;
 			auto h1 = M1 * p;
-			auto offset = phi_hat[point_to_index(h1, r_bar, r)];
+			auto offset = phi_hat[point_to_index<d>(h1, r_bar, r)];
 			return h0 + offset;
 		}
 
@@ -335,59 +244,18 @@ namespace psh
 
 		T get(const point<d>& p) const
 		{
-			auto maybe_element = H[point_to_index(h(p), m_bar, m)];
-			if (maybe_element)
-				return maybe_element.value();
+			auto i = point_to_index<d>(h(p), m_bar, m);
+			if (H_b[i])
+				return H[i];
 			else
 				throw std::out_of_range("Element not found in map");
 		}
 
-		bool contains(const data_t& data, const decltype(H)& H_hat, const decltype(phi)& phi_hat) const
-		{
-			auto found = H_hat[point_to_index(h(data.location, phi_hat), m_bar, m)];
-			return bool(found) && found == data.contents;
-		}
-
-		bool contains(const data_t& data) const
-		{
-			return contains(data, H, phi);
-		}
-
-		bool contains(const point<d>& p, const decltype(H)& H_hat, const decltype(phi)& phi_hat) const
-		{
-			return bool(H_hat[point_to_index(h(p, phi_hat), m_bar, m)]);
-		}
-
-		bool contains(const point<d>& p) const
-		{
-			return contains(p, H, phi);
-		}
-
-		bool contains(uint index, const data_t& data, const decltype(H)& H_hat) const
-		{
-			auto found = H_hat[index];
-			return bool(found) && found == data.contents;
-		}
-
-		bool contains(uint index, const data_t& data) const
-		{
-			return contains(index, data, H);
-		}
-
-		bool contains(uint index, const decltype(H)& H_hat) const
-		{
-			return bool(H_hat[index]);
-		}
-
-		bool contains(uint index) const
-		{
-			return contains(index, H);
-		}
-
 		uint memory_size() const
 		{
-			return sizeof(*this) + sizeof(typename decltype(phi)::value_type) * phi.size()
-				+ sizeof(typename decltype(H)::value_type) * H.size();
+			return sizeof(*this)
+				+ sizeof(typename decltype(phi)::value_type) * phi.capacity()
+				+ sizeof(typename decltype(H)::value_type) * H.capacity();
 		}
 	};
 }
