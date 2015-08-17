@@ -45,6 +45,7 @@ namespace psh
 		uint m;
 		uint r_bar;
 		uint r;
+		std::vector<bool> phi_b;
 		std::vector<point<d>> phi;
 		std::vector<bool> H_b;
 		std::vector<T> H;
@@ -92,11 +93,11 @@ namespace psh
 		}
 
 		void insert(const bucket& b, decltype(H)& H_hat, decltype(H_b)& H_b_hat,
-			const decltype(phi)& phi_hat)
+			const decltype(phi)& phi_hat, const decltype(phi_b)& phi_b_hat)
 		{
 			for (auto& element : b)
 			{
-				auto hashed = h(element.location, phi_hat);
+				auto hashed = h(element.location, phi_hat, phi_b_hat);
 				auto i = point_to_index<d>(hashed, m_bar, m);
 				H_hat[i] = element.contents;
 				H_b_hat[i] = true;
@@ -104,7 +105,7 @@ namespace psh
 		}
 
 		bool jiggle_offsets(decltype(H)& H_hat, decltype(H_b)& H_b_hat,
-			decltype(phi)& phi_hat, const bucket& b,
+			decltype(phi)& phi_hat, decltype(phi_b)& phi_b_hat, const bucket& b,
 			std::uniform_int_distribution<uint>& m_dist)
 		{
 			uint start_offset = m_dist(generator);
@@ -128,7 +129,7 @@ namespace psh
 						return chunk_index;
 					}) &
 				tbb::make_filter<uint, void>(tbb::filter::parallel,
-					[=, &mutex, &found, &found_offset, &b, &phi_hat, &H_hat, &H_b_hat](uint i0)
+					[=, &mutex, &found, &found_offset, &b, &phi_hat, &phi_b_hat, &H_hat, &H_b_hat](uint i0)
 					{
 						for (uint i = i0; i < i0 + group_size && !found; i++)
 						{
@@ -162,8 +163,9 @@ namespace psh
 				);
 			if (found)
 			{
+				phi_b_hat[b.phi_index] = true;
 				phi_hat[b.phi_index] = found_offset;
-				insert(b, H_hat, H_b_hat, phi_hat);
+				insert(b, H_hat, H_b_hat, phi_hat, phi_b_hat);
 				return true;
 			}
 			return false;
@@ -198,6 +200,7 @@ namespace psh
 		{
 			decltype(phi) phi_hat;
 			phi_hat.reserve(r);
+			decltype(phi_b) phi_b_hat(r, false);
 			decltype(H) H_hat;
 			H_hat.reserve(m);
 			decltype(H_b) H_b_hat(m, false);
@@ -216,7 +219,7 @@ namespace psh
 				if (i % (buckets.size() / 10) == 0)
 					std::cout << (100 * i) / buckets.size() << "% done" << std::endl;
 
-				if (!jiggle_offsets(H_hat, H_b_hat, phi_hat, buckets[i], m_dist))
+				if (!jiggle_offsets(H_hat, H_b_hat, phi_hat, phi_b_hat, buckets[i], m_dist))
 				{
 					return false;
 				}
@@ -224,22 +227,27 @@ namespace psh
 
 			std::cout << "done!" << std::endl;
 			phi = std::move(phi_hat);
+			phi_b = std::move(phi_b_hat);
 			H = std::move(H_hat);
 			H_b = std::move(H_b_hat);
 			return true;
 		}
 
-		point<d> h(const point<d>& p, const decltype(phi)& phi_hat) const
+		point<d> h(const point<d>& p, const decltype(phi)& phi_hat,
+			const decltype(phi_b)& phi_b_hat) const
 		{
 			auto h0 = M0 * p;
 			auto h1 = M1 * p;
-			auto offset = phi_hat[point_to_index<d>(h1, r_bar, r)];
+			auto i = point_to_index<d>(h1, r_bar, r);
+			if (!phi_b_hat[i])
+				throw std::out_of_range("Element not found in map");
+			auto offset = phi_hat[i];
 			return h0 + offset;
 		}
 
 		point<d> h(const point<d>& p) const
 		{
-			return h(p, phi);
+			return h(p, phi, phi_b);
 		}
 
 		T get(const point<d>& p) const
@@ -255,7 +263,9 @@ namespace psh
 		{
 			return sizeof(*this)
 				+ sizeof(typename decltype(phi)::value_type) * phi.capacity()
-				+ sizeof(typename decltype(H)::value_type) * H.capacity();
+				+ sizeof(typename decltype(phi_b)::value_type) * phi_b.capacity()
+				+ sizeof(typename decltype(H)::value_type) * H.capacity()
+				+ sizeof(typename decltype(H_b)::value_type) * H_b.capacity();
 		}
 	};
 }
