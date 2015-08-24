@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <utility>
 #include "tbb/parallel_sort.h"
+#include "tbb/parallel_for_each.h"
 #include "tbb/mutex.h"
 #include "tbb/pipeline.h"
 #include "util.hpp"
@@ -335,25 +336,35 @@ namespace psh
 			}
 
 			// third sweep
-			for (auto& kvp : collisions)
-			{
-			rehash:
-				// kvp.first == l == location in H
-				H_hat[kvp.first].rehash(M2);
-
-				for (uint i : kvp.second)
+			tbb::parallel_for_each(collisions.begin(), collisions.end(),
+				[&](const decltype(collisions)::value_type& kvp)
 				{
-					// i == index in U, does not exist in input data
-					// if one of these have the same hk as som H_hat[kvp.first]
-					// break, success = false, call the po-po
-					auto p = index_to_point<d>(i, domain_size[0], uint(-1));
-					uint hk = entry::h(p, M2, H_hat[kvp.first].k);
-					if (H_hat[kvp.first].location != p && H_hat[kvp.first].hk == hk)
-					{
-						goto rehash;
-					}
+					fix_k(H_hat[kvp.first], kvp.first, kvp.second, domain_size);
+				});
+		}
+
+		void fix_k(entry_large& H_entry, uint l, const std::vector<uint>& collisions,
+			const point<d>& domain_size)
+		{
+			// l == location in H
+			H_entry.rehash(M2);
+
+			bool success = true;
+			for (uint i : collisions)
+			{
+				// i == index in U, does not exist in input data
+				// if one of these have the same hk as H_entry
+				// break, success = false, call the po-po
+				auto p = index_to_point<d>(i, domain_size[0], uint(-1));
+				uint hk = entry::h(p, M2, H_entry.k);
+				if (H_entry.location != p && H_entry.hk == hk)
+				{
+					success = false;
+					break;
 				}
 			}
+			if (!success)
+				fix_k(H_entry, l, collisions, domain_size);
 		}
 
 		point<d> h(const point<d>& p, const decltype(phi)& phi_hat) const
