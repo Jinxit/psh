@@ -6,6 +6,7 @@
 #include <random>
 #include <iostream>
 #include <vector>
+#include <unordered_map>
 #include <utility>
 #include "tbb/parallel_sort.h"
 #include "tbb/mutex.h"
@@ -38,8 +39,52 @@ namespace psh
 			}
 		};
 
+		struct entry
+		{
+			uint k;
+			uint hk;
+			T contents;
+
+			entry() : k(1), hk(1), contents(T()) { };
+			entry(const data_t& data, uint M2) : k(1), contents(data.contents)
+			{
+				rehash(data, M2);
+			}
+
+			static constexpr uint h(const point<d>& p, uint M2, uint k)
+			{
+				return p * point<d>::increasing_pow(k) * M2;
+			}
+
+			void rehash(const point<d>& location, uint M2, uint new_k = 1)
+			{
+				k = new_k;
+				hk = h(location, M2, k);
+			}
+
+			void rehash(const data_t& data, uint M2, uint new_k = 1)
+			{
+				rehash(data.location, M2, new_k);
+			}
+
+			constexpr bool equals(const point<d>& p, uint M2) const
+			{
+				return hk == h(p, M2, k);
+			}
+		};
+
+		struct entry_large : public entry
+		{
+			point<d> location;
+			entry_large() : entry(), location(point<d>()) { };
+			entry_large(const data_t& data, uint M2)
+				: entry(data, M2), location(data.location) { };
+			void rehash(uint M2) { entry::rehash(location, M2, entry::k + 1); };
+		};
+
 		uint M0;
 		uint M1;
+		uint M2;
 		uint n;
 		uint m_bar;
 		uint m;
@@ -48,18 +93,23 @@ namespace psh
 		std::vector<bool> phi_b;
 		std::vector<point<d>> phi;
 		std::vector<bool> H_b;
-		std::vector<T> H;
+		std::vector<entry> H;
 		std::default_random_engine generator;
 
-		map(const std::vector<data_t>& data)
+		map(const std::vector<data_t>& data, const point<d>& domain_size)
 			: n(data.size()), m_bar(std::ceil(std::pow(n, 1.0f / d))), m(std::pow(m_bar, d)),
 			  r_bar(std::ceil(std::pow(n / d, 1.0f / d)) - 1), generator(time(0))
 		{
 			M0 = prime();
 			while ((M1 = prime()) == M0);
+			M2 = prime();
 
 			VALUE(m);
 			VALUE(m_bar);
+
+			VALUE(M0);
+			VALUE(M1);
+			VALUE(M2);
 
 			bool create_succeeded = false;
 
@@ -72,15 +122,16 @@ namespace psh
 				VALUE(r);
 				VALUE(r_bar);
 
-				create_succeeded = create(data, m_dist);
+				create_succeeded = create(data, domain_size, m_dist);
 
 			} while (!create_succeeded);
 		}
 
 		uint prime()
 		{
-			static const std::vector<uint> primes{ 53, 97, 193, 389, 769, 1543, 3079, 6151, 12289,
-				24593, 49157, 98317, 196613, 393241, 786433, 1572869, 3145739, 6291469 };
+			static const std::vector<uint> primes{ 53, 97, 193, 389, 769, 1543, 3079,
+				6151, 12289, 24593, 49157, 98317, 196613, 393241, 786433, 1572869,
+				3145739, 6291469 };
 			static std::uniform_int_distribution<uint> prime_dist(0, primes.size() - 1);
 
 			return primes[prime_dist(generator)];
@@ -92,19 +143,19 @@ namespace psh
 			return m_mod_r == 1 || m_mod_r == r - 1;
 		}
 
-		void insert(const bucket& b, decltype(H)& H_hat, decltype(H_b)& H_b_hat,
+		void insert(const bucket& b, std::vector<entry_large>& H_hat, decltype(H_b)& H_b_hat,
 			const decltype(phi)& phi_hat, const decltype(phi_b)& phi_b_hat)
 		{
 			for (auto& element : b)
 			{
 				auto hashed = h(element.location, phi_hat, phi_b_hat);
 				auto i = point_to_index<d>(hashed, m_bar, m);
-				H_hat[i] = element.contents;
+				H_hat[i] = entry_large(element, M2);
 				H_b_hat[i] = true;
 			}
 		}
 
-		bool jiggle_offsets(decltype(H)& H_hat, decltype(H_b)& H_b_hat,
+		bool jiggle_offsets(std::vector<entry_large>& H_hat, decltype(H_b)& H_b_hat,
 			decltype(phi)& phi_hat, decltype(phi_b)& phi_b_hat, const bucket& b,
 			std::uniform_int_distribution<uint>& m_dist)
 		{
@@ -196,13 +247,12 @@ namespace psh
 			return buckets;
 		}
 
-		bool create(const std::vector<data_t>& data, std::uniform_int_distribution<uint>& m_dist)
+		bool create(const std::vector<data_t>& data, const point<d>& domain_size,
+			std::uniform_int_distribution<uint>& m_dist)
 		{
-			decltype(phi) phi_hat;
-			phi_hat.reserve(r);
+			decltype(phi) phi_hat(r);
 			decltype(phi_b) phi_b_hat(r, false);
-			decltype(H) H_hat;
-			H_hat.reserve(m);
+			std::vector<entry_large> H_hat(m);
 			decltype(H_b) H_b_hat(m, false);
 			std::cout << "creating " << r << " buckets" << std::endl;
 
@@ -228,9 +278,88 @@ namespace psh
 			std::cout << "done!" << std::endl;
 			phi = std::move(phi_hat);
 			phi_b = std::move(phi_b_hat);
-			H = std::move(H_hat);
+			hash_positions(data, domain_size, H_hat, H_b_hat);
+			std::copy(H_hat.begin(), H_hat.end(), std::back_inserter(H));
 			H_b = std::move(H_b_hat);
+
 			return true;
+		}
+
+		void hash_positions(const std::vector<data_t>& data, const point<d>& domain_size,
+			std::vector<entry_large>& H_hat, decltype(H_b)& H_b_hat)
+		{
+			// domain_size - 1 to get the highest indices in each direction
+			// width is assumed to be equal in all directions
+			// we don't expect it to roll over so we mod by the maximum uint, -1
+			// and then add 1 to get the size, not the index
+			uint domain_i_max = point_to_index<d>(domain_size - 1, domain_size[0],
+				uint(-1)) + 1;
+			std::vector<bool> indices(m);
+			{
+				uint j = 0;
+				uint k = point_to_index<d>(data[j].location, domain_size[0], uint(-1));
+
+				// first sweep
+				for (uint i = 0; i < domain_i_max; i++)
+				{
+					if (k == i)
+					{
+						j++;
+						k = point_to_index<d>(data[j].location, domain_size[0], uint(-1));
+						continue;
+					}
+					// for each point p in original image which is empty
+
+					auto p = index_to_point<d>(i, domain_size[0], uint(-1));
+					uint l = point_to_index<d>(h(p), m_bar, m);
+					if (H_hat[l].hk == entry::h(p, M2, 1))
+					{
+						//     if (get(p).hk == p.hk)
+						//         indices.add(p)
+						indices[l] = true;
+					}
+				}
+				std::cout << "data size: " << data.size() << std::endl;
+				std::cout << "indices size: " << indices.size() << std::endl;
+			}
+
+			std::unordered_map<uint, std::vector<uint>> collisions;
+			{
+				// second sweep
+				for (uint i = 0; i < domain_i_max; i++)
+				{
+					// for each point p in original image
+
+					auto p = index_to_point<d>(i, domain_size[0], uint(-1));
+					uint l = point_to_index<d>(h(p), m_bar, m);
+					// it's like collect everyone that maps to the same thing
+					if (indices[l])
+					{
+						collisions[l].push_back(i);
+					}
+				}
+			}
+
+			// third sweep
+			for (auto& kvp : collisions)
+			{
+			rehash:
+				// kvp.first == l == location in H
+				H_hat[kvp.first].rehash(M2);
+
+				for (uint i : kvp.second)
+				{
+					// i == index in U, does not exist in input data
+					// if one of these have the same hk as som H_hat[kvp.first]
+					// break, success = false, call the po-po
+					auto p = index_to_point<d>(i, domain_size[0], uint(-1));
+					uint hk = entry::h(p, M2, H_hat[kvp.first].k);
+					if (H_hat[kvp.first].location != p && H_hat[kvp.first].hk == hk)
+					{
+						goto rehash;
+					}
+				}
+			}
 		}
 
 		point<d> h(const point<d>& p, const decltype(phi)& phi_hat,
@@ -239,8 +368,6 @@ namespace psh
 			auto h0 = M0 * p;
 			auto h1 = M1 * p;
 			auto i = point_to_index<d>(h1, r_bar, r);
-			if (!phi_b_hat[i])
-				throw std::out_of_range("Element not found in map");
 			auto offset = phi_hat[i];
 			return h0 + offset;
 		}
@@ -253,8 +380,8 @@ namespace psh
 		T get(const point<d>& p) const
 		{
 			auto i = point_to_index<d>(h(p), m_bar, m);
-			if (H_b[i])
-				return H[i];
+			if (H_b[i] && H[i].equals(p, M2))
+				return H[i].contents;
 			else
 				throw std::out_of_range("Element not found in map");
 		}
