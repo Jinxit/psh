@@ -169,7 +169,7 @@ namespace psh
 
 			tbb::parallel_pipeline(num_cores,
 				tbb::make_filter<void, uint>(tbb::filter::serial,
-					[=, &chunk_index, &found, &group_size](tbb::flow_control& fc) {
+					[&, group_size](tbb::flow_control& fc) {
 						if (found || chunk_index >= r)
 						{
 							fc.stop();
@@ -178,7 +178,7 @@ namespace psh
 						return chunk_index;
 					}) &
 				tbb::make_filter<uint, void>(tbb::filter::parallel,
-					[=, &mutex, &found, &found_offset, &b, &phi_hat, &H_hat, &H_b_hat](uint i0)
+					[&, group_size](uint i0)
 					{
 						for (uint i = i0; i < i0 + group_size && !found; i++)
 						{
