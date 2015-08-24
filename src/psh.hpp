@@ -90,9 +90,7 @@ namespace psh
 		uint m;
 		uint r_bar;
 		uint r;
-		std::vector<bool> phi_b;
 		std::vector<point<d>> phi;
-		std::vector<bool> H_b;
 		std::vector<entry> H;
 		std::default_random_engine generator;
 
@@ -143,20 +141,20 @@ namespace psh
 			return m_mod_r == 1 || m_mod_r == r - 1;
 		}
 
-		void insert(const bucket& b, std::vector<entry_large>& H_hat, decltype(H_b)& H_b_hat,
-			const decltype(phi)& phi_hat, const decltype(phi_b)& phi_b_hat)
+		void insert(const bucket& b, std::vector<entry_large>& H_hat, std::vector<bool>& H_b_hat,
+			const decltype(phi)& phi_hat)
 		{
 			for (auto& element : b)
 			{
-				auto hashed = h(element.location, phi_hat, phi_b_hat);
+				auto hashed = h(element.location, phi_hat);
 				auto i = point_to_index<d>(hashed, m_bar, m);
 				H_hat[i] = entry_large(element, M2);
 				H_b_hat[i] = true;
 			}
 		}
 
-		bool jiggle_offsets(std::vector<entry_large>& H_hat, decltype(H_b)& H_b_hat,
-			decltype(phi)& phi_hat, decltype(phi_b)& phi_b_hat, const bucket& b,
+		bool jiggle_offsets(std::vector<entry_large>& H_hat, std::vector<bool>& H_b_hat,
+			decltype(phi)& phi_hat, const bucket& b,
 			std::uniform_int_distribution<uint>& m_dist)
 		{
 			uint start_offset = m_dist(generator);
@@ -180,7 +178,7 @@ namespace psh
 						return chunk_index;
 					}) &
 				tbb::make_filter<uint, void>(tbb::filter::parallel,
-					[=, &mutex, &found, &found_offset, &b, &phi_hat, &phi_b_hat, &H_hat, &H_b_hat](uint i0)
+					[=, &mutex, &found, &found_offset, &b, &phi_hat, &H_hat, &H_b_hat](uint i0)
 					{
 						for (uint i = i0; i < i0 + group_size && !found; i++)
 						{
@@ -214,9 +212,8 @@ namespace psh
 				);
 			if (found)
 			{
-				phi_b_hat[b.phi_index] = true;
 				phi_hat[b.phi_index] = found_offset;
-				insert(b, H_hat, H_b_hat, phi_hat, phi_b_hat);
+				insert(b, H_hat, H_b_hat, phi_hat);
 				return true;
 			}
 			return false;
@@ -251,9 +248,8 @@ namespace psh
 			std::uniform_int_distribution<uint>& m_dist)
 		{
 			decltype(phi) phi_hat(r);
-			decltype(phi_b) phi_b_hat(r, false);
 			std::vector<entry_large> H_hat(m);
-			decltype(H_b) H_b_hat(m, false);
+			std::vector<bool> H_b_hat(m, false);
 			std::cout << "creating " << r << " buckets" << std::endl;
 
 			if (bad_m_r())
@@ -269,7 +265,7 @@ namespace psh
 				if (i % (buckets.size() / 10) == 0)
 					std::cout << (100 * i) / buckets.size() << "% done" << std::endl;
 
-				if (!jiggle_offsets(H_hat, H_b_hat, phi_hat, phi_b_hat, buckets[i], m_dist))
+				if (!jiggle_offsets(H_hat, H_b_hat, phi_hat, buckets[i], m_dist))
 				{
 					return false;
 				}
@@ -277,16 +273,14 @@ namespace psh
 
 			std::cout << "done!" << std::endl;
 			phi = std::move(phi_hat);
-			phi_b = std::move(phi_b_hat);
-			hash_positions(data, domain_size, H_hat, H_b_hat);
+			hash_positions(data, domain_size, H_hat);
 			std::copy(H_hat.begin(), H_hat.end(), std::back_inserter(H));
-			H_b = std::move(H_b_hat);
 
 			return true;
 		}
 
 		void hash_positions(const std::vector<data_t>& data, const point<d>& domain_size,
-			std::vector<entry_large>& H_hat, decltype(H_b)& H_b_hat)
+			std::vector<entry_large>& H_hat)
 		{
 			// domain_size - 1 to get the highest indices in each direction
 			// width is assumed to be equal in all directions
@@ -362,8 +356,7 @@ namespace psh
 			}
 		}
 
-		point<d> h(const point<d>& p, const decltype(phi)& phi_hat,
-			const decltype(phi_b)& phi_b_hat) const
+		point<d> h(const point<d>& p, const decltype(phi)& phi_hat) const
 		{
 			auto h0 = M0 * p;
 			auto h1 = M1 * p;
@@ -374,13 +367,13 @@ namespace psh
 
 		point<d> h(const point<d>& p) const
 		{
-			return h(p, phi, phi_b);
+			return h(p, phi);
 		}
 
 		T get(const point<d>& p) const
 		{
 			auto i = point_to_index<d>(h(p), m_bar, m);
-			if (H_b[i] && H[i].equals(p, M2))
+			if (H[i].equals(p, M2))
 				return H[i].contents;
 			else
 				throw std::out_of_range("Element not found in map");
@@ -390,9 +383,7 @@ namespace psh
 		{
 			return sizeof(*this)
 				+ sizeof(typename decltype(phi)::value_type) * phi.capacity()
-				+ sizeof(typename decltype(phi_b)::value_type) * phi_b.capacity()
-				+ sizeof(typename decltype(H)::value_type) * H.capacity()
-				+ sizeof(typename decltype(H_b)::value_type) * H_b.capacity();
+				+ sizeof(typename decltype(H)::value_type) * H.capacity();
 		}
 	};
 }
