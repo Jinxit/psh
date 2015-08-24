@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <utility>
 #include "tbb/parallel_sort.h"
+#include "tbb/parallel_for.h"
 #include "tbb/parallel_for_each.h"
 #include "tbb/mutex.h"
 #include "tbb/pipeline.h"
@@ -289,51 +290,55 @@ namespace psh
 			// and then add 1 to get the size, not the index
 			uint domain_i_max = point_to_index<d>(domain_size - 1, domain_size[0],
 				uint(-1)) + 1;
-			std::vector<bool> indices(m);
+
+			tbb::mutex mutex;
+
+			std::vector<bool> indices(m, false);
 			{
-				uint j = 0;
-				uint k = point_to_index<d>(data[j].location, domain_size[0], uint(-1));
-
-				// first sweep
-				for (uint i = 0; i < domain_i_max; i++)
+				std::vector<bool> data_b(domain_i_max);
+				for (uint i = 0; i < data.size(); i++)
 				{
-					if (k == i)
-					{
-						j++;
-						k = point_to_index<d>(data[j].location, domain_size[0], uint(-1));
-						continue;
-					}
-					// for each point p in original image which is empty
-
-					auto p = index_to_point<d>(i, domain_size[0], uint(-1));
-					uint l = point_to_index<d>(h(p), m_bar, m);
-					if (H_hat[l].hk == entry::h(p, M2, 1))
-					{
-						//     if (get(p).hk == p.hk)
-						//         indices.add(p)
-						indices[l] = true;
-					}
+					data_b[point_to_index<d>(data[i].location, domain_size[0], uint(-1))] = true;
 				}
+				// first sweep
+				tbb::parallel_for(uint(0), domain_i_max, [&](uint i)
+					{
+						// for each point p in original image which is empty
+						if (data_b[i])
+						{
+							return;
+						}
+
+						auto p = index_to_point<d>(i, domain_size[0], uint(-1));
+						uint l = point_to_index<d>(h(p), m_bar, m);
+
+						if (H_hat[l].hk == entry::h(p, M2, 1))
+						{
+							// if (get(p).hk == p.hk)
+							//     indices.add(p)
+							indices[l] = true;
+						}
+					});
 				std::cout << "data size: " << data.size() << std::endl;
 				std::cout << "indices size: " << indices.size() << std::endl;
 			}
 
 			std::unordered_map<uint, std::vector<uint>> collisions;
-			{
-				// second sweep
-				for (uint i = 0; i < domain_i_max; i++)
+			// second sweep
+			tbb::parallel_for(uint(0), domain_i_max, [&](uint i)
 				{
 					// for each point p in original image
 
 					auto p = index_to_point<d>(i, domain_size[0], uint(-1));
 					uint l = point_to_index<d>(h(p), m_bar, m);
-					// it's like collect everyone that maps to the same thing
+
+					// collect everyone that maps to the same thing
 					if (indices[l])
 					{
+						tbb::mutex::scoped_lock lock(mutex);
 						collisions[l].push_back(i);
 					}
-				}
-			}
+				});
 
 			// third sweep
 			tbb::parallel_for_each(collisions.begin(), collisions.end(),
