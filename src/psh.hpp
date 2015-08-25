@@ -279,6 +279,7 @@ namespace psh
 			phi = std::move(phi_hat);
 			if (!hash_positions(data, domain_size, H_hat))
 				return false;
+			H.reserve(H_hat.size());
 			std::copy(H_hat.begin(), H_hat.end(), std::back_inserter(H));
 
 			return true;
