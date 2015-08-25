@@ -5,59 +5,83 @@
 
 namespace psh
 {
-	template<uint d>
-	constexpr uint point_to_index(const point<d>& p, uint width, uint max)
+	namespace
 	{
-		uint index = p[0];
-		for (uint i = 1; i < d; i++)
+		template<uint d, class Int>
+		struct point_helpers
 		{
-			index += uint(std::pow(width, i)) * p[i];
-		}
-		return index % max;
-	}
-
-	template<>
-	constexpr uint point_to_index<2>(const point<2>& p, uint width, uint max)
-	{
-		return (width * p[0] + p[1]) % max;
-	}
-
-	template<>
-	constexpr uint point_to_index<3>(const point<3>& p, uint width, uint max)
-	{
-		return (p[2] + width * p[1] + width * width * p[0]) % max;
-	}
-
-	template<uint d>
-	constexpr point<d> index_to_point(uint index, uint width, uint max)
-	{
-		point<d> output;
-		max /= width;
-		for (uint i = 0; i < d; i++)
-		{
-			output[i] = index / max;
-			index = index % max;
-
-			if (i + 1 < d)
+			static constexpr Int point_to_index(const point<d, Int>& p, Int width, Int max)
 			{
-				max /= width;
+				Int index = p[0];
+				for (uint i = 1; i < d; i++)
+				{
+					index += width * p[i];
+					width *= width;
+				}
+				return index % max;
 			}
-		}
-		return output;
+
+			static constexpr point<d, Int> index_to_point(Int index, Int width, Int max)
+			{
+				point<d, Int> output;
+				max /= width;
+				for (uint i = 0; i < d; i++)
+				{
+					output[i] = index / max;
+					index = index % max;
+
+					if (i + 1 < d)
+					{
+						max /= width;
+					}
+				}
+				return output;
+			}
+		};
+
+		template<class Int>
+		struct point_helpers<2, Int>
+		{
+			static constexpr Int point_to_index(const point<2, Int>& p, Int width, Int max)
+			{
+				return (width * p[0] + p[1]) % max;
+			}
+
+			static constexpr point<2, Int> index_to_point(Int index, Int width, Int max)
+			{
+				return point<2, Int>{index / width, index % width};
+			}
+		};
+
+		template<class Int>
+		struct point_helpers<3, Int>
+		{
+			static constexpr Int point_to_index(const point<3, Int>& p, Int width, Int max)
+			{
+				return (p[2] + width * p[1] + width * width * p[0]) % max;
+			}
+
+			static constexpr point<3, Int> index_to_point(Int index, Int width, Int max)
+			{
+				return point<3, Int>{
+					index / (width * width),
+					(index % (width * width)) / width,
+					(index % (width * width)) % width};
+			}
+		};
 	}
 
-	template<>
-	constexpr point<2> index_to_point<2>(uint index, uint width, uint max)
+	template<uint d, class IntS, class IntL>
+	constexpr IntL point_to_index(const point<d, IntS>& p, IntS width, IntL max)
 	{
-		return point<2>{index / width, index % width};
+		static_assert(sizeof(IntS) <= sizeof(IntL), "2");
+		return point_helpers<d, IntL>::point_to_index(point<d, IntL>(p), IntL(width), max);
 	}
 
-	template<>
-	constexpr point<3> index_to_point<3>(uint index, uint width, uint max)
+	template<uint d, class IntS, class IntL>
+	constexpr point<d, IntS> index_to_point(IntL index, IntS width, IntL max)
 	{
-		return point<3>{
-			index / (width * width),
-			(index % (width * width)) / width,
-			(index % (width * width)) % width};
+		static_assert(sizeof(IntS) <= sizeof(IntL), "3");
+		return point<d, IntS>(point_helpers<d, IntL>::index_to_point(index, IntL(width), max));
 	}
 }

@@ -2,13 +2,24 @@
 
 namespace psh
 {
-	template<uint d>
+	template<uint d, class Scalar>
 	struct point
 	{
-		uint data[d]{0};
+		Scalar data[d]{0};
 
-		constexpr uint operator[](uint i) const { return data[i]; }
-		uint& operator[](uint i) { return data[i]; }
+		template<class F>
+		explicit operator point<d, F>() const
+		{
+			point<d, F> output;
+			for (uint i = 0; i < d; i++)
+			{
+				output[i] = F(data[i]);
+			}
+			return output;
+		}
+
+		constexpr Scalar operator[](uint i) const { return data[i]; }
+		Scalar& operator[](uint i) { return data[i]; }
 
 		static constexpr point increasing_linear()
 		{
@@ -20,7 +31,7 @@ namespace psh
 			return output;
 		}
 
-		static constexpr point increasing_pow(uint k)
+		static constexpr point increasing_pow(Scalar k)
 		{
 			point output;
 			output[0] = k;
@@ -32,17 +43,17 @@ namespace psh
 		}
 
 		template<class F>
-		friend point operator*(const point& p, F scalar)
+		friend point operator*(const point& p, F other)
 		{
 			point output = p;
 			for (uint i = 0; i < d; i++)
-				output[i] *= scalar;
+				output[i] *= other;
 			return output;
 		}
 		template<class F>
-		friend point operator*(F scalar, const point& p)
+		friend point operator*(F other, const point& p)
 		{
-			return p * scalar;
+			return p * other;
 		}
 
 		friend uint operator*(const point& lhs, const point& rhs)
@@ -54,31 +65,31 @@ namespace psh
 		}
 
 		template<class F>
-		friend point operator+(const point& p, F scalar)
+		friend point operator+(const point& p, F other)
 		{
 			point output = p;
 			for (uint i = 0; i < d; i++)
-				output[i] += scalar;
+				output[i] += other;
 			return output;
 		}
 		template<class F>
-		friend point operator+(F scalar, const point& p)
+		friend point operator+(F other, const point& p)
 		{
-			return p + scalar;
+			return p + other;
 		}
 
 		template<class F>
-		friend point operator-(const point& p, F scalar)
+		friend point operator-(const point& p, F other)
 		{
 			point output = p;
 			for (uint i = 0; i < d; i++)
-				output[i] -= scalar;
+				output[i] -= other;
 			return output;
 		}
 		template<class F>
-		friend point operator-(F scalar, const point& p)
+		friend point operator-(F other, const point& p)
 		{
-			return p - scalar;
+			return p - other;
 		}
 
 		friend point operator+(const point& lhs, const point& rhs)
