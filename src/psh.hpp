@@ -59,9 +59,10 @@ namespace psh
 			point<d, PosInt> location;
 			T contents;
 		};
+		using data_function = std::function<data_t(IndexInt)>;
 
-		map(const std::vector<data_t>& data, const point<d, PosInt>& domain_size)
-			: n(data.size()), m_bar(std::ceil(std::pow(n, 1.0f / d))), m(std::pow(m_bar, d)),
+		map(const data_function& data, IndexInt n, const point<d, PosInt>& domain_size)
+			: n(n), m_bar(std::ceil(std::pow(n, 1.0f / d))), m(std::pow(m_bar, d)),
 			  r_bar(std::ceil(std::pow(n / d, 1.0f / d)) - 1), generator(time(0))
 		{
 			// generate primes, M0 must be different from M1
@@ -204,7 +205,7 @@ namespace psh
 		}
 
 		// tried to create the hash table given a certain offset table size
-		bool create(const std::vector<data_t>& data, const point<d, PosInt>& domain_size,
+		bool create(const data_function& data, const point<d, PosInt>& domain_size,
 			std::uniform_int_distribution<IndexInt>& m_dist)
 		{
 			// _hats are temporary variables, later moved into the real vectors
@@ -258,7 +259,7 @@ namespace psh
 		// creates buckets, each buckets corresponds to one entry in the offset table
 		// they are then sorted by their index in the offset table so we can assign
 		// the largest buckets first
-		std::vector<bucket> create_buckets(const std::vector<data_t>& data)
+		std::vector<bucket> create_buckets(const data_function& data)
 		{
 			std::vector<bucket> buckets;
 			buckets.reserve(r);
@@ -269,8 +270,9 @@ namespace psh
 					});
 			}
 
-			for (auto& element : data)
+			for (IndexInt i = 0; i < n; i++)
 			{
+				auto element = data(i);
 				auto h1 = element.location * M1;
 				buckets[point_to_index(h1, r_bar, r)].push_back(element);
 			}
@@ -376,7 +378,7 @@ namespace psh
 			}
 		}
 
-		bool hash_positions(const std::vector<data_t>& data, const point<d, PosInt>& domain_size,
+		bool hash_positions(const data_function& data, const point<d, PosInt>& domain_size,
 			std::vector<entry_large>& H_hat)
 		{
 			// domain_size - 1 to get the highest indices in each direction
@@ -391,9 +393,9 @@ namespace psh
 			std::vector<bool> indices(m, false);
 			{
 				std::vector<bool> data_b(domain_i_max);
-				for (IndexInt i = 0; i < data.size(); i++)
+				for (IndexInt i = 0; i < n; i++)
 				{
-					data_b[point_to_index(data[i].location, d_width, domain_i_max)] = true;
+					data_b[point_to_index(data(i).location, d_width, domain_i_max)] = true;
 				}
 				tbb::parallel_for(IndexInt(0), domain_i_max, [&](IndexInt i)
 					{
@@ -412,7 +414,7 @@ namespace psh
 							indices[l] = true;
 						}
 					});
-				std::cout << "data size: " << data.size() << std::endl;
+				std::cout << "data size: " << n << std::endl;
 				std::cout << "indices size: " << indices.size() << std::endl;
 			}
 
