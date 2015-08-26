@@ -44,6 +44,17 @@ namespace psh
 			return output;
 		}
 
+		// returns {k, k, k...}
+		static constexpr point repeating(Scalar k)
+		{
+			point output;
+			for (uint i = 0; i < d; i++)
+			{
+				output[i] = k;
+			}
+			return output;
+		}
+
 		template<class F>
 		friend point<d, F> operator*(const point& p, F other)
 		{

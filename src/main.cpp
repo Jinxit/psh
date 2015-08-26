@@ -83,7 +83,7 @@ int main( int argc, const char* argv[] )
 	std::cout << "data %: " << float(data.size()) / std::pow(width, d) << std::endl;
 
 	auto start_time = std::chrono::high_resolution_clock::now();
-	map s([&](size_t i) { return data[i]; }, data.size(), point{width, width, width});
+	map s([&](size_t i) { return data[i]; }, data.size(), width);
 	auto stop_time = std::chrono::high_resolution_clock::now();
 
 	bool failed = false;
