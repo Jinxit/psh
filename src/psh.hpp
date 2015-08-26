@@ -26,12 +26,78 @@ namespace psh
 	{
 		static_assert(d > 0, "d must be larger than 0.");
 		using IndexInt = size_t;
+		class bucket;
+		class entry;
+		class entry_large;
+
+		IndexInt M0;
+		IndexInt M1;
+		IndexInt M2;
+		IndexInt n;
+		PosInt m_bar;
+		IndexInt m;
+		PosInt r_bar;
+		IndexInt r;
+		std::vector<point<d, PosInt>> phi;
+		std::vector<entry> H;
+		std::default_random_engine generator;
+
 	public:
 		struct data_t
 		{
 			point<d, PosInt> location;
 			T contents;
 		};
+
+		map(const std::vector<data_t>& data, const point<d, PosInt>& domain_size)
+			: n(data.size()), m_bar(std::ceil(std::pow(n, 1.0f / d))), m(std::pow(m_bar, d)),
+			  r_bar(std::ceil(std::pow(n / d, 1.0f / d)) - 1), generator(time(0))
+		{
+			M0 = prime();
+			while ((M1 = prime()) == M0);
+			M2 = prime();
+
+			VALUE(m);
+			VALUE(m_bar);
+
+			VALUE(M0);
+			VALUE(M1);
+			VALUE(M2);
+
+			bool create_succeeded = false;
+
+			std::uniform_int_distribution<IndexInt> m_dist(0, m - 1);
+
+			do
+			{
+				r_bar += d;
+				r = std::pow(r_bar, d);
+				VALUE(r);
+				VALUE(r_bar);
+
+				create_succeeded = create(data, domain_size, m_dist);
+
+			} while (!create_succeeded);
+		}
+
+		T get(const point<d, PosInt>& p) const
+		{
+			auto i = point_to_index(h(p), m_bar, m);
+			if (H[i].equals(p, M2))
+				return H[i].contents;
+			else
+				throw std::out_of_range("Element not found in map");
+		}
+
+		size_t memory_size() const
+		{
+			return sizeof(*this)
+				+ sizeof(typename decltype(phi)::value_type) * phi.capacity()
+				+ sizeof(typename decltype(H)::value_type) * H.capacity();
+		}
+
+	private:
+		// internal data structures
 
 		struct bucket : public std::vector<data_t>
 		{
@@ -86,47 +152,20 @@ namespace psh
 			void rehash(IndexInt M2) { entry::rehash(location, M2, entry::k + 1); };
 		};
 
-		IndexInt M0;
-		IndexInt M1;
-		IndexInt M2;
-		IndexInt n;
-		PosInt m_bar;
-		IndexInt m;
-		PosInt r_bar;
-		IndexInt r;
-		std::vector<point<d, PosInt>> phi;
-		std::vector<entry> H;
-		std::default_random_engine generator;
+		// internal functions
 
-		map(const std::vector<data_t>& data, const point<d, PosInt>& domain_size)
-			: n(data.size()), m_bar(std::ceil(std::pow(n, 1.0f / d))), m(std::pow(m_bar, d)),
-			  r_bar(std::ceil(std::pow(n / d, 1.0f / d)) - 1), generator(time(0))
+		point<d, PosInt> h(const point<d, PosInt>& p, const decltype(phi)& phi_hat) const
 		{
-			M0 = prime();
-			while ((M1 = prime()) == M0);
-			M2 = prime();
+			auto h0 = M0 * p;
+			auto h1 = M1 * p;
+			auto i = point_to_index(h1, r_bar, r);
+			auto offset = phi_hat[i];
+			return h0 + offset;
+		}
 
-			VALUE(m);
-			VALUE(m_bar);
-
-			VALUE(M0);
-			VALUE(M1);
-			VALUE(M2);
-
-			bool create_succeeded = false;
-
-			std::uniform_int_distribution<IndexInt> m_dist(0, m - 1);
-
-			do
-			{
-				r_bar += d;
-				r = std::pow(r_bar, d);
-				VALUE(r);
-				VALUE(r_bar);
-
-				create_succeeded = create(data, domain_size, m_dist);
-
-			} while (!create_succeeded);
+		point<d, PosInt> h(const point<d, PosInt>& p) const
+		{
+			return h(p, phi);
 		}
 
 		IndexInt prime()
@@ -139,22 +178,72 @@ namespace psh
 			return primes[prime_dist(generator)];
 		}
 
+		bool create(const std::vector<data_t>& data, const point<d, PosInt>& domain_size,
+			std::uniform_int_distribution<IndexInt>& m_dist)
+		{
+			decltype(phi) phi_hat(r);
+			std::vector<entry_large> H_hat(m);
+			std::vector<bool> H_b_hat(m, false);
+			std::cout << "creating " << r << " buckets" << std::endl;
+
+			if (bad_m_r())
+				return false;
+
+			auto buckets = create_buckets(data);
+			std::cout << "jiggling offsets" << std::endl;
+
+			for (IndexInt i = 0; i < buckets.size(); i++)
+			{
+				if (buckets[i].size() == 0)
+					break;
+				if (i % (buckets.size() / 10) == 0)
+					std::cout << (100 * i) / buckets.size() << "% done" << std::endl;
+
+				if (!jiggle_offsets(H_hat, H_b_hat, phi_hat, buckets[i], m_dist))
+				{
+					return false;
+				}
+			}
+
+			std::cout << "done!" << std::endl;
+			phi = std::move(phi_hat);
+			if (!hash_positions(data, domain_size, H_hat))
+				return false;
+			H.reserve(H_hat.size());
+			std::copy(H_hat.begin(), H_hat.end(), std::back_inserter(H));
+
+			return true;
+		}
+
 		bool bad_m_r()
 		{
 			auto m_mod_r = m_bar % r_bar;
 			return m_mod_r == 1 || m_mod_r == r_bar - 1;
 		}
 
-		void insert(const bucket& b, std::vector<entry_large>& H_hat, std::vector<bool>& H_b_hat,
-			const decltype(phi)& phi_hat)
+		std::vector<bucket> create_buckets(const std::vector<data_t>& data)
 		{
-			for (auto& element : b)
+			std::vector<bucket> buckets;
+			buckets.reserve(r);
 			{
-				auto hashed = h(element.location, phi_hat);
-				auto i = point_to_index(hashed, m_bar, m);
-				H_hat[i] = entry_large(element, M2);
-				H_b_hat[i] = true;
+				IndexInt i = 0;
+				std::generate_n(std::back_inserter(buckets), r, [&] {
+						return bucket(i++);
+					});
 			}
+
+			for (auto& element : data)
+			{
+				auto h1 = M1 * element.location;
+				buckets[point_to_index(h1, r_bar, r)].push_back(element);
+			}
+
+			std::cout << "buckets created" << std::endl;
+
+			tbb::parallel_sort(buckets.begin(), buckets.end());
+			std::cout << "buckets sorted" << std::endl;
+
+			return buckets;
 		}
 
 		bool jiggle_offsets(std::vector<entry_large>& H_hat, std::vector<bool>& H_b_hat,
@@ -223,66 +312,16 @@ namespace psh
 			return false;
 		}
 
-		std::vector<bucket> create_buckets(const std::vector<data_t>& data)
+		void insert(const bucket& b, std::vector<entry_large>& H_hat, std::vector<bool>& H_b_hat,
+			const decltype(phi)& phi_hat)
 		{
-			std::vector<bucket> buckets;
-			buckets.reserve(r);
+			for (auto& element : b)
 			{
-				IndexInt i = 0;
-				std::generate_n(std::back_inserter(buckets), r, [&] {
-						return bucket(i++);
-					});
+				auto hashed = h(element.location, phi_hat);
+				auto i = point_to_index(hashed, m_bar, m);
+				H_hat[i] = entry_large(element, M2);
+				H_b_hat[i] = true;
 			}
-
-			for (auto& element : data)
-			{
-				auto h1 = M1 * element.location;
-				buckets[point_to_index(h1, r_bar, r)].push_back(element);
-			}
-
-			std::cout << "buckets created" << std::endl;
-
-			tbb::parallel_sort(buckets.begin(), buckets.end());
-			std::cout << "buckets sorted" << std::endl;
-
-			return buckets;
-		}
-
-		bool create(const std::vector<data_t>& data, const point<d, PosInt>& domain_size,
-			std::uniform_int_distribution<IndexInt>& m_dist)
-		{
-			decltype(phi) phi_hat(r);
-			std::vector<entry_large> H_hat(m);
-			std::vector<bool> H_b_hat(m, false);
-			std::cout << "creating " << r << " buckets" << std::endl;
-
-			if (bad_m_r())
-				return false;
-
-			auto buckets = create_buckets(data);
-			std::cout << "jiggling offsets" << std::endl;
-
-			for (IndexInt i = 0; i < buckets.size(); i++)
-			{
-				if (buckets[i].size() == 0)
-					break;
-				if (i % (buckets.size() / 10) == 0)
-					std::cout << (100 * i) / buckets.size() << "% done" << std::endl;
-
-				if (!jiggle_offsets(H_hat, H_b_hat, phi_hat, buckets[i], m_dist))
-				{
-					return false;
-				}
-			}
-
-			std::cout << "done!" << std::endl;
-			phi = std::move(phi_hat);
-			if (!hash_positions(data, domain_size, H_hat))
-				return false;
-			H.reserve(H_hat.size());
-			std::copy(H_hat.begin(), H_hat.end(), std::back_inserter(H));
-
-			return true;
 		}
 
 		bool hash_positions(const std::vector<data_t>& data, const point<d, PosInt>& domain_size,
@@ -382,36 +421,6 @@ namespace psh
 			if (!success)
 				return fix_k(H_entry, l, collisions, domain_size);
 			return true;
-		}
-
-		point<d, PosInt> h(const point<d, PosInt>& p, const decltype(phi)& phi_hat) const
-		{
-			auto h0 = M0 * p;
-			auto h1 = M1 * p;
-			auto i = point_to_index(h1, r_bar, r);
-			auto offset = phi_hat[i];
-			return h0 + offset;
-		}
-
-		point<d, PosInt> h(const point<d, PosInt>& p) const
-		{
-			return h(p, phi);
-		}
-
-		T get(const point<d, PosInt>& p) const
-		{
-			auto i = point_to_index(h(p), m_bar, m);
-			if (H[i].equals(p, M2))
-				return H[i].contents;
-			else
-				throw std::out_of_range("Element not found in map");
-		}
-
-		size_t memory_size() const
-		{
-			return sizeof(*this)
-				+ sizeof(typename decltype(phi)::value_type) * phi.capacity()
-				+ sizeof(typename decltype(H)::value_type) * H.capacity();
 		}
 	};
 }

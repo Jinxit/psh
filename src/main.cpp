@@ -94,8 +94,6 @@ int main( int argc, const char* argv[] )
 
 	auto original_data_size = width * width * width * (sizeof(voxel) + sizeof(point));
 	std::cout << "original data: " << (original_data_size / (1024 * 1024.0f)) << " mb" << std::endl;
-	std::cout << "m_bar: " << s.m_bar << " ^ 3 = " << uint(std::pow(s.m_bar, 3)) << std::endl;
-	std::cout << "r_bar: " << s.r_bar << " ^ 3 = " << uint(std::pow(s.r_bar, 3)) << std::endl;
 
 	std::cout << "class size: " << std::endl;
 	std::cout << s.memory_size() << " bytes" << std::endl;
