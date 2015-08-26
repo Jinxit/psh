@@ -65,7 +65,7 @@ int main( int argc, const char* argv[] )
 					data.push_back(
 						map::data_t{
 							point{x, y, z},
-							voxel{x + y + z}
+							voxel{uint16_t(x + y + z)}
 						});
 					data_b[psh::point_to_index<d>(point{x, y, z}, width, uint(-1))] = true;
 				}
