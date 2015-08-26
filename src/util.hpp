@@ -72,6 +72,13 @@ namespace psh
 	}
 
 	template<uint d, class IntS, class IntL>
+	constexpr IntL point_to_index(const point<d, IntL>& p, IntS width, IntL max)
+	{
+		static_assert(sizeof(IntS) <= sizeof(IntL), "2");
+		return point_helpers<d, IntL>::point_to_index(point<d, IntL>(p), IntL(width), max);
+	}
+
+	template<uint d, class IntS, class IntL>
 	constexpr IntL point_to_index(const point<d, IntS>& p, IntS width, IntL max)
 	{
 		static_assert(sizeof(IntS) <= sizeof(IntL), "2");

@@ -43,17 +43,12 @@ namespace psh
 		}
 
 		template<class F>
-		friend point operator*(const point& p, F other)
+		friend point<d, F> operator*(const point& p, F other)
 		{
-			point output = p;
+			point<d, F> output;
 			for (uint i = 0; i < d; i++)
-				output[i] *= other;
+				output[i] = F(p[i]) * other;
 			return output;
-		}
-		template<class F>
-		friend point operator*(F other, const point& p)
-		{
-			return p * other;
 		}
 
 		friend uint operator*(const point& lhs, const point& rhs)
@@ -65,38 +60,35 @@ namespace psh
 		}
 
 		template<class F>
-		friend point operator+(const point& p, F other)
+		friend point<d, F> operator+(const point& p, F other)
 		{
-			point output = p;
+			point<d, F> output;
 			for (uint i = 0; i < d; i++)
-				output[i] += other;
+				output[i] += F(p[i]) + other;
 			return output;
 		}
-		template<class F>
-		friend point operator+(F other, const point& p)
-		{
-			return p + other;
-		}
-
-		template<class F>
-		friend point operator-(const point& p, F other)
-		{
-			point output = p;
-			for (uint i = 0; i < d; i++)
-				output[i] -= other;
-			return output;
-		}
-		template<class F>
-		friend point operator-(F other, const point& p)
-		{
-			return p - other;
-		}
-
 		friend point operator+(const point& lhs, const point& rhs)
 		{
 			point output = lhs;
 			for (uint i = 0; i < d; i++)
 				output[i] += rhs[i];
+			return output;
+		}
+		template<class F>
+		friend point<d, F> operator+(const point<d, Scalar>& lhs, const point<d, F>& rhs)
+		{
+			point<d, F> output = rhs;
+			for (uint i = 0; i < d; i++)
+				output[i] += lhs[i];
+			return output;
+		}
+
+		template<class F>
+		friend point<d, F> operator-(const point& p, F other)
+		{
+			point<d, F> output = p;
+			for (uint i = 0; i < d; i++)
+				output[i] -= other;
 			return output;
 		}
 

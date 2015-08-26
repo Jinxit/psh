@@ -58,7 +58,7 @@ namespace psh
 			M2 = prime();
 
 			VALUE(m);
-			VALUE(m_bar);
+			VALUE(uint(m_bar));
 
 			VALUE(M0);
 			VALUE(M1);
@@ -73,7 +73,7 @@ namespace psh
 				r_bar += d;
 				r = std::pow(r_bar, d);
 				VALUE(r);
-				VALUE(r_bar);
+				VALUE(uint(r_bar));
 
 				create_succeeded = create(data, domain_size, m_dist);
 
@@ -156,8 +156,8 @@ namespace psh
 
 		point<d, PosInt> h(const point<d, PosInt>& p, const decltype(phi)& phi_hat) const
 		{
-			auto h0 = M0 * p;
-			auto h1 = M1 * p;
+			auto h0 = p * M0;
+			auto h1 = p * M1;
 			auto i = point_to_index(h1, r_bar, r);
 			auto offset = phi_hat[i];
 			return h0 + offset;
@@ -234,7 +234,7 @@ namespace psh
 
 			for (auto& element : data)
 			{
-				auto h1 = M1 * element.location;
+				auto h1 = element.location * M1;
 				buckets[point_to_index(h1, r_bar, r)].push_back(element);
 			}
 
@@ -280,8 +280,8 @@ namespace psh
 							bool collision = false;
 							for (auto& element : b)
 							{
-								auto h0 = M0 * element.location;
-								auto h1 = M1 * element.location;
+								auto h0 = element.location * M0;
+								auto h1 = element.location * M1;
 								auto index = point_to_index(h1, r_bar, r);
 								auto offset = index == b.phi_index ? phi_offset : phi_hat[index];
 								auto hash = h0 + offset;
@@ -331,7 +331,7 @@ namespace psh
 			// width is assumed to be equal in all directions
 			// and then add 1 to get the size, not the index
 			PosInt d_width = domain_size[0];
-			IndexInt domain_i_max = point_to_index(domain_size - 1, d_width, IndexInt(-1)) + 1;
+			IndexInt domain_i_max = point_to_index(domain_size - PosInt(1), d_width, IndexInt(-1)) + 1;
 
 			tbb::mutex mutex;
 

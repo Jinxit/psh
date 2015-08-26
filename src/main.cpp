@@ -49,12 +49,12 @@ int main( int argc, const char* argv[] )
 {
 	using voxel = voxelgroup;
 	const uint d = 3;
-	using PosInt = uint16_t;
-	using HashInt = uint16_t;
+	using PosInt = uint8_t;
+	using HashInt = uint8_t;
 	using map = psh::map<d, voxel, PosInt, HashInt>;
 	using point = psh::point<d, PosInt>;
 
-	PosInt width = 256;
+	PosInt width = 128;
 	std::vector<map::data_t> data;
 	std::vector<bool> data_b(width * width * width);
 	for (PosInt x = 0; x < width; x++)
@@ -63,15 +63,16 @@ int main( int argc, const char* argv[] )
 		{
 			for (PosInt z = 0; z < width; z++)
 			{
-				if (rand() % 50 == 0)
+				if (rand() % 10 == 0)
 				{
 					//std::cout << point{x, y, z} << std::endl;
 					data.push_back(
 						map::data_t{
 							point{x, y, z},
+							//voxel{uint16_t(x + y + z)}
 							voxel{
-								uint16_t(rand()), uint16_t(rand()), uint16_t(rand()), uint16_t(rand()),
-								uint16_t(rand()), uint16_t(rand()), uint16_t(rand()), uint16_t(rand())}
+								uint16_t(x), uint16_t(y), uint16_t(z), uint16_t(x+1),
+								uint16_t(y+1), uint16_t(z+1), uint16_t(x+2), uint16_t(y+2)}
 						});
 					data_b[psh::point_to_index<d>(point{x, y, z}, width, uint(-1))] = true;
 				}
