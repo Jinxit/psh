@@ -21,6 +21,7 @@ namespace psh
 		constexpr Scalar operator[](uint i) const { return data[i]; }
 		Scalar& operator[](uint i) { return data[i]; }
 
+		// returns {0, 1, 2..., d}
 		static constexpr point increasing_linear()
 		{
 			point output;
@@ -31,6 +32,7 @@ namespace psh
 			return output;
 		}
 
+		// returns {k, k * k, k * k * k..., k^(d+1)}
 		static constexpr point increasing_pow(Scalar k)
 		{
 			point output;
@@ -50,7 +52,6 @@ namespace psh
 				output[i] = F(p[i]) * other;
 			return output;
 		}
-
 		friend uint operator*(const point& lhs, const point& rhs)
 		{
 			uint output = 0;

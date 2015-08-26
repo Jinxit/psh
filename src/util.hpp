@@ -7,6 +7,9 @@ namespace psh
 {
 	namespace
 	{
+		// these functions convert between multidimensional (points) and linear (index) coordinates
+
+		// helper struct to allow partial specialization of function templates
 		template<uint d, class Int>
 		struct point_helpers
 		{
@@ -74,21 +77,21 @@ namespace psh
 	template<uint d, class IntS, class IntL>
 	constexpr IntL point_to_index(const point<d, IntL>& p, IntS width, IntL max)
 	{
-		static_assert(sizeof(IntS) <= sizeof(IntL), "2");
+		static_assert(sizeof(IntS) <= sizeof(IntL), "IntS must be smaller or equal to IntL");
 		return point_helpers<d, IntL>::point_to_index(point<d, IntL>(p), IntL(width), max);
 	}
 
 	template<uint d, class IntS, class IntL>
 	constexpr IntL point_to_index(const point<d, IntS>& p, IntS width, IntL max)
 	{
-		static_assert(sizeof(IntS) <= sizeof(IntL), "2");
+		static_assert(sizeof(IntS) <= sizeof(IntL), "IntS must be smaller or equal to IntL");
 		return point_helpers<d, IntL>::point_to_index(point<d, IntL>(p), IntL(width), max);
 	}
 
 	template<uint d, class IntS, class IntL>
 	constexpr point<d, IntS> index_to_point(IntL index, IntS width, IntL max)
 	{
-		static_assert(sizeof(IntS) <= sizeof(IntL), "3");
+		static_assert(sizeof(IntS) <= sizeof(IntL), "IntS must be smaller or equal to IntL");
 		return point<d, IntS>(point_helpers<d, IntL>::index_to_point(index, IntL(width), max));
 	}
 }
