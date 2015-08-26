@@ -26,24 +26,9 @@ struct dumb
 	}
 };
 
-struct voxel
-{
-	uint16_t var;
-
-	friend std::ostream& operator<< (std::ostream& stream, const voxel& v)
-	{
-		stream << v.var;
-		return stream;
-	}
-	friend bool operator==(const voxel& lhs, const voxel& rhs)
-	{
-		return lhs.var == rhs.var;
-	}
-	friend bool operator!=(const voxel& lhs, const voxel& rhs) { return !(lhs == rhs); }
-};
-
 int main( int argc, const char* argv[] )
 {
+	using voxel = uint16_t;
 	const uint d = 3;
 	using PosInt = uint16_t;
 	using HashInt = uint16_t;
