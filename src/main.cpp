@@ -26,9 +26,28 @@ struct dumb
 	}
 };
 
+struct voxelgroup
+{
+	uint16_t voxels[8];
+
+	friend bool operator==(const voxelgroup& lhs, const voxelgroup& rhs)
+	{
+		return std::equal(lhs.voxels, lhs.voxels + 8, rhs.voxels);
+	}
+	friend bool operator!=(const voxelgroup& lhs, const voxelgroup& rhs) { return !(lhs == rhs); }
+	friend std::ostream& operator<< (std::ostream& stream, const voxelgroup& vg)
+	{
+		stream << "(";
+		for (uint i = 0; i < 8; i++)
+			stream << ", " << vg.voxels[i];
+		stream << ")";
+		return stream;
+	}
+};
+
 int main( int argc, const char* argv[] )
 {
-	using voxel = uint16_t;
+	using voxel = voxelgroup;
 	const uint d = 3;
 	using PosInt = uint16_t;
 	using HashInt = uint16_t;
@@ -44,13 +63,15 @@ int main( int argc, const char* argv[] )
 		{
 			for (PosInt z = 0; z < width; z++)
 			{
-				if (rand() % 10 == 0)
+				if (rand() % 50 == 0)
 				{
 					//std::cout << point{x, y, z} << std::endl;
 					data.push_back(
 						map::data_t{
 							point{x, y, z},
-							voxel{uint16_t(x + y + z)}
+							voxel{
+								uint16_t(rand()), uint16_t(rand()), uint16_t(rand()), uint16_t(rand()),
+								uint16_t(rand()), uint16_t(rand()), uint16_t(rand()), uint16_t(rand())}
 						});
 					data_b[psh::point_to_index<d>(point{x, y, z}, width, uint(-1))] = true;
 				}
