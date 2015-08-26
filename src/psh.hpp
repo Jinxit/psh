@@ -48,6 +48,8 @@ namespace psh
 		PosInt r_bar;
 		// size of the offset table
 		IndexInt r;
+		// u_bar is the limit of the domain in each dimension
+		PosInt u_bar;
 		// offset table
 		std::vector<point<d, PosInt>> phi;
 		std::vector<entry> H;
@@ -62,10 +64,10 @@ namespace psh
 		using data_function = std::function<data_t(IndexInt)>;
 
 		// data_function maps an index to a data point, n is the total number of data points,
-		// domain_width is the limit of the domain in each dimension
-		map(const data_function& data, IndexInt n, PosInt domain_width)
+		// u_bar is the limit of the domain in each dimension
+		map(const data_function& data, IndexInt n, PosInt u_bar)
 			: n(n), m_bar(std::ceil(std::pow(n, 1.0f / d))), m(std::pow(m_bar, d)),
-			  r_bar(std::ceil(std::pow(n / d, 1.0f / d)) - 1), generator(time(0))
+			  r_bar(std::ceil(std::pow(n / d, 1.0f / d)) - 1), u_bar(u_bar), generator(time(0))
 		{
 			// generate primes, M0 must be different from M1
 			M0 = prime();
@@ -90,7 +92,7 @@ namespace psh
 				VALUE(r);
 				VALUE(uint(r_bar));
 
-				create_succeeded = create(data, domain_width, m_dist);
+				create_succeeded = create(data, m_dist);
 
 			} while (!create_succeeded);
 		}
@@ -207,7 +209,7 @@ namespace psh
 		}
 
 		// tried to create the hash table given a certain offset table size
-		bool create(const data_function& data, PosInt domain_width,
+		bool create(const data_function& data,
 			std::uniform_int_distribution<IndexInt>& m_dist)
 		{
 			// _hats are temporary variables, later moved into the real vectors
@@ -241,7 +243,7 @@ namespace psh
 
 			std::cout << "done!" << std::endl;
 			phi = std::move(phi_hat);
-			if (!hash_positions(data, domain_width, H_hat))
+			if (!hash_positions(data, H_hat))
 				return false;
 			H.reserve(H_hat.size());
 			std::copy(H_hat.begin(), H_hat.end(), std::back_inserter(H));
@@ -380,15 +382,15 @@ namespace psh
 			}
 		}
 
-		bool hash_positions(const data_function& data, PosInt domain_width,
+		bool hash_positions(const data_function& data,
 			std::vector<entry_large>& H_hat)
 		{
-			// domain_width - 1 to get the highest indices in each direction
+			// u_bar - 1 to get the highest indices in each direction
 			// width is assumed to be equal in all directions
 			// and then add 1 to get the size, not the index
 			IndexInt domain_i_max = point_to_index(
-				point<d, PosInt>::repeating(domain_width) - PosInt(1),
-				domain_width, IndexInt(-1)) + 1;
+				point<d, PosInt>::repeating(u_bar) - PosInt(1),
+				u_bar, IndexInt(-1)) + 1;
 
 			tbb::mutex mutex;
 
@@ -398,7 +400,7 @@ namespace psh
 				std::vector<bool> data_b(domain_i_max);
 				for (IndexInt i = 0; i < n; i++)
 				{
-					data_b[point_to_index(data(i).location, domain_width, domain_i_max)] = true;
+					data_b[point_to_index(data(i).location, u_bar, domain_i_max)] = true;
 				}
 				tbb::parallel_for(IndexInt(0), domain_i_max, [&](IndexInt i)
 					{
@@ -407,7 +409,7 @@ namespace psh
 							return;
 						}
 
-						auto p = index_to_point<d, PosInt>(i, domain_width, domain_i_max);
+						auto p = index_to_point<d, PosInt>(i, u_bar, domain_i_max);
 						auto l = point_to_index(h(p), m_bar, m);
 
 						// if their position hash collides with the existing element..
@@ -429,7 +431,7 @@ namespace psh
 				{
 					// for each point p in original image
 
-					auto p = index_to_point<d, PosInt>(i, domain_width, domain_i_max);
+					auto p = index_to_point<d, PosInt>(i, u_bar, domain_i_max);
 					auto l = point_to_index(h(p), m_bar, m);
 
 					// collect everyone that maps to the same thing
@@ -445,7 +447,7 @@ namespace psh
 			tbb::parallel_for_each(collisions.begin(), collisions.end(),
 				[&](const decltype(collisions)::value_type& kvp)
 				{
-					if (!fix_k(H_hat[kvp.first], kvp.second, domain_width))
+					if (!fix_k(H_hat[kvp.first], kvp.second))
 					{
 						tbb::mutex::scoped_lock lock(mutex);
 						success = false;
@@ -455,7 +457,7 @@ namespace psh
 		}
 
 		// try all values for the positional hash parameter until it works 
-		bool fix_k(entry_large& H_entry, const std::vector<IndexInt>& collisions, PosInt domain_width)
+		bool fix_k(entry_large& H_entry, const std::vector<IndexInt>& collisions)
 		{
 			H_entry.rehash(M2);
 			// if k == 0, we've rolled around and already tried all the values
@@ -467,7 +469,7 @@ namespace psh
 			{
 				// i is the index in the domain
 				// fail if one of these have the same positional hash as the entry in the hash table
-				auto p = index_to_point<d, PosInt>(i, domain_width, IndexInt(-1));
+				auto p = index_to_point<d, PosInt>(i, u_bar, IndexInt(-1));
 				auto hk = entry::h(p, M2, H_entry.k);
 				if (H_entry.location != p && H_entry.hk == hk)
 				{
@@ -477,7 +479,7 @@ namespace psh
 			}
 			// if we didn't find a valid k, recursively move on to the next k
 			if (!success)
-				return fix_k(H_entry, collisions, domain_width);
+				return fix_k(H_entry, collisions);
 			return true;
 		}
 	};
