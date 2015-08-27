@@ -50,6 +50,8 @@ namespace psh
 		IndexInt r;
 		// u_bar is the limit of the domain in each dimension
 		PosInt u_bar;
+		// u is the number of elements in the domain
+		IndexInt u;
 		// offset table
 		std::vector<point<d, PosInt>> phi;
 		std::vector<entry> H;
@@ -67,7 +69,8 @@ namespace psh
 		// u_bar is the limit of the domain in each dimension
 		map(const data_function& data, IndexInt n, PosInt u_bar)
 			: n(n), m_bar(std::ceil(std::pow(n, 1.0f / d))), m(std::pow(m_bar, d)),
-			  r_bar(std::ceil(std::pow(n / d, 1.0f / d)) - 1), u_bar(u_bar), generator(time(0))
+			  r_bar(std::ceil(std::pow(n / d, 1.0f / d)) - 1), u_bar(u_bar), u(std::pow(u_bar, d)),
+			  generator(time(0))
 		{
 			// generate primes, M0 must be different from M1
 			M0 = prime();
@@ -97,7 +100,7 @@ namespace psh
 			} while (!create_succeeded);
 		}
 
-		T get(const point<d, PosInt>& p) const
+		T& get(const point<d, PosInt>& p)
 		{
 			// find where the element would be located
 			auto i = point_to_index(h(p), m_bar, m);
@@ -106,6 +109,56 @@ namespace psh
 				return H[i].contents;
 			else
 				throw std::out_of_range("Element not found in map");
+		}
+		const T& get(const point<d, PosInt>& p) const
+		{
+			return get(p);
+		}
+
+		bool add(const point<d, PosInt>& p, const T& contents)
+		{
+			auto i = point_to_index(h(p), m_bar, m);
+			if (H[i].hk == 1)
+			{
+				H[i] = entry(data_t{p, contents}, M2);
+				return true;
+			}
+			else if (H[i].equals(p, M2))
+			{
+				H[i].contents = contents;
+				H[i].rehash(p, M2, H[i].k);
+				return true;
+			}
+
+			return false;
+		}
+
+		map rebuild(const data_function& new_data, IndexInt new_n, const std::vector<bool>& data_b)
+		{
+			std::vector<data_t> data;
+			data.reserve(n + new_n);
+			for (IndexInt i = 0; i < u; i++)
+			{
+				auto p = index_to_point<d, PosInt>(i, u_bar, u);
+				try
+				{
+					data.push_back(data_t{p, get(p)});
+				}
+				catch (const std::out_of_range& e)
+				{
+					if (data_b[i])
+						std::cout << "OOPS" << std::endl << std::endl;
+				}
+			}
+			for (IndexInt i = 0; i < new_n; i++)
+			{
+				data.push_back(new_data(i));
+			}
+
+			return map([&](IndexInt i)
+				{
+					return data[i];
+				}, data.size(), u_bar);
 		}
 
 		size_t memory_size() const
