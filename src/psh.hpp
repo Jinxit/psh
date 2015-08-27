@@ -147,7 +147,11 @@ namespace psh
 				catch (const std::out_of_range& e)
 				{
 					if (data_b[i])
+					{
+						// TODO: investigate when/why this happens
 						std::cout << "OOPS" << std::endl << std::endl;
+						throw "bail out";
+					}
 				}
 			}
 			for (IndexInt i = 0; i < new_n; i++)
