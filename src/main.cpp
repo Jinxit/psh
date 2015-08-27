@@ -45,8 +45,9 @@ struct voxelgroup
 	}
 };
 
-int main( int argc, const char* argv[] )
+void voxel_test()
 {
+
 	using voxel = voxelgroup;
 	const uint d = 3;
 	using PosInt = uint8_t;
@@ -80,47 +81,16 @@ int main( int argc, const char* argv[] )
 		}
 	}
 	std::cout << "data size: " << data.size() << std::endl;
-	std::cout << "data %: " << float(data.size()) / std::pow(width, d) << std::endl;
+	std::cout << "data density: " << float(data.size()) / std::pow(width, d) << std::endl;
 
 	auto start_time = std::chrono::high_resolution_clock::now();
 	map s([&](size_t i) { return data[i]; }, data.size(), width);
 	auto stop_time = std::chrono::high_resolution_clock::now();
 
-	bool failed = false;
-	std::cout << "verifying" << std::endl;
-	for (auto& element : data)
-	{
-		voxel found;
-		try
-		{
-			found = s.get(element.location);
-		}
-		catch (const std::out_of_range& e)
-		{
-			std::cout << "element not found in hash!" << std::endl;
-			std::cout << element.contents << std::endl;
-			failed = true;
-		}
-		if (element.contents != found)
-		{
-			std::cout << "element different in hash!" << std::endl;
-			std::cout << element.contents << std::endl;
-			std::cout << found << std::endl;
-			failed = true;
-		}
-	}
-	if (failed)
-		std::cout << "failed!" << std::endl;
-	else
-		std::cout << "success!" << std::endl;
-
 	auto original_data_size = width * width * width * (sizeof(voxel) + sizeof(point));
 	std::cout << "original data: " << (original_data_size / (1024 * 1024.0f)) << " mb" << std::endl;
 
-	std::cout << "class size: " << std::endl;
-	std::cout << s.memory_size() << " bytes" << std::endl;
-	std::cout << s.memory_size() / 1024 << " kb" << std::endl;
-	std::cout << s.memory_size() / (1024 * 1024.0f) << " mb" << std::endl;
+	std::cout << "class size: " << s.memory_size() / (1024 * 1024.0f) << " mb" << std::endl;
 
 	std::cout << "compression factor vs dense: " << (float(s.memory_size())
 		/ (uint(std::pow(width, 3)) * sizeof(voxel))) << std::endl;
@@ -157,4 +127,8 @@ int main( int argc, const char* argv[] )
 			}
 		});
 	std::cout << "finished!" << std::endl;
+}
+
+int main( int argc, const char* argv[] )
+{
 }
