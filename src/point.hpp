@@ -121,7 +121,7 @@ namespace psh
 			stream << "(";
 			for (uint i = 0; i < d; i++)
 			{
-				stream << p.data[i];
+				stream << +p.data[i];
 				if (i != d - 1)
 					stream << ", ";
 			}
@@ -129,4 +129,26 @@ namespace psh
 			return stream;
 		}
 	};
+}
+
+namespace std
+{
+	template<uint d, class Scalar>
+	struct hash<psh::point<d, Scalar>>
+	{
+		size_t operator()(const psh::point<d, Scalar>& p) const
+		{
+			// Compute individual hash values for first,
+			// second and third and combine them using XOR
+			// and bit shifting:
+
+			size_t output = hash<Scalar>()(p[0]);
+			for (uint i = 1; i < d; i++)
+			{
+				output ^= hash<Scalar>()(p[i]);
+			}
+			return output;
+		}
+	};
+
 }
